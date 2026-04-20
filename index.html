@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>めし管理</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍚</text></svg>">
 <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;700;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#0f0f0f;--sur:#1a1a1a;--sur2:#212121;--bdr:#2a2a2a;--grn:#c8f55a;--ora:#f5a34e;--tel:#5af5c8;--red:#ff5f5f;--blu:#5ab4f5;--txt:#f0f0f0;--muted:#777;--tab:56px}
@@ -449,8 +450,8 @@ async function init(){
   useFetch=true;setSt('busy','接続中...');log('=== init ===');
   try{
     const[iD,lD,wD,cD]=await Promise.all([gasRead('food'),gasRead('foodlog'),gasRead('weight'),gasRead('config')]);
-    ingredients=parseRows(iD).map(r=>({id:String(r[0]),name:String(r[1]||''),qty:String(r[2]||'適量'),expiry:String(r[3]||''),frozen:r[4]==='1'})).filter(r=>r.name);
-    foodLog=parseRows(lD).map(r=>({id:String(r[0]),date:String(r[1]||''),food:String(r[2]||''),kcal:parseInt(r[3])||0,note:String(r[4]||''),mealtype:String(r[5]||'夜')})).filter(r=>r.food);
+    ingredients=parseRows(iD).map(r=>({id:String(r[0]),name:String(r[1]||''),qty:String(r[2]||'適量'),expiry:String(r[3]||'').slice(0,10),frozen:r[4]==='1'})).filter(r=>r.name);
+    foodLog=parseRows(lD).map(r=>({id:String(r[0]),date:String(r[1]||'').slice(0,10),food:String(r[2]||''),kcal:parseInt(r[3])||0,note:String(r[4]||''),mealtype:String(r[5]||'夜')})).filter(r=>r.food);
     weightLog=parseRows(wD).map(r=>({date:String(r[0]||'').slice(0,10),kg:parseFloat(r[1])})).filter(r=>r.date&&!isNaN(r.kg));
     weightLog.sort((a,b)=>a.date.localeCompare(b.date));
     const cfg=Object.fromEntries(parseRows(cD).map(r=>[String(r[0]),String(r[1]||'')]));
@@ -765,7 +766,7 @@ function renderLog(){
   pE.forEach(e=>{if(!gr[e.date])gr[e.date]=[];gr[e.date].push(e)});
   document.getElementById('log-past').innerHTML=Object.entries(gr).sort((a,b)=>b[0].localeCompare(a[0])).slice(0,5).map(([date,es])=>{
     const total=es.reduce((s,e)=>s+(e.kcal||0),0);
-    return `<div style="margin-bottom:12px"><div class="li-sub">${date} → 合計 ${total} kcal</div>${[...es].sort((a,b)=>mOrd.indexOf(a.mealtype)-mOrd.indexOf(b.mealtype)).map(e=>`<div class="li" style="padding:6px 0"><div class="li-name" style="font-size:13px"><span class="meal-bdg meal-${e.mealtype||'夜'}" style="font-size:9px">${e.mealtype||'夜'}</span>${e.food}</div><div class="li-sub" style="color:var(--ora)">${e.kcal} kcal</div></div>`).join('')}</div>`;
+    return `<div style="margin-bottom:12px"><div class="li-sub">${date} → 合計 ${total} kcal</div>${[...es].sort((a,b)=>mOrd.indexOf(a.mealtype)-mOrd.indexOf(b.mealtype)).map(e=>`<div class="li" style="padding:6px 0"><div><div class="li-name" style="font-size:13px"><span class="meal-bdg meal-${e.mealtype||'夜'}" style="font-size:9px">${e.mealtype||'夜'}</span>${e.food}</div><div class="li-sub" style="color:var(--ora)">${e.kcal} kcal${e.note?' · '+e.note:''}</div></div></div>`).join('')}</div>`;
   }).join('');
 }
 async function genWeeklySummary(){
