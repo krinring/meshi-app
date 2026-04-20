@@ -495,6 +495,9 @@ function selectMeal(btn){
   btn.classList.add('on');selectedMeal=btn.getAttribute('data-meal');
 }
 
+// ===== Local date helper (JST対応) =====
+function todayStr(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
+
 // ===== Claude =====
 async function askClaude(prompt,maxTok=1400){
   const k=localStorage.getItem('claude_api_key')||'';
@@ -555,7 +558,10 @@ async function freezeIng(id){
 }
 function expSt(ex,frozen){
   if(frozen)return'frozen';if(!ex)return null;
-  const d=Math.floor((new Date(ex)-new Date().setHours(0,0,0,0))/86400000);
+  const [ey,em,ed]=ex.slice(0,10).split('-').map(Number);
+  const exDate=new Date(ey,em-1,ed);
+  const now=new Date();now.setHours(0,0,0,0);
+  const d=Math.floor((exDate-now)/86400000);
   return d<0?'exp':d<=2?'soon':'ok';
 }
 function renderIng(){
@@ -567,7 +573,7 @@ function renderIng(){
       if(st==='exp')exp++;else if(st==='soon')soon++;
       const bdg=st==='exp'?'<span class="bdg bdg-r">期限切れ</span>':st==='soon'?'<span class="bdg bdg-o">期限近</span>':st==='frozen'?'<span class="bdg bdg-f">❄️冷凍</span>':'';
       const fBtn=(st==='soon'||st==='exp')&&!i.frozen?`<button class="btn btn-sm" style="font-size:11px;padding:5px 8px;color:var(--blu);flex-shrink:0" onclick="freezeIng('${i.id}')">❄️冷凍</button>`:i.frozen?`<button class="btn btn-sm" style="font-size:11px;padding:5px 8px;flex-shrink:0" onclick="freezeIng('${i.id}')">解凍</button>`:'';
-      return `<div class="li"><div style="flex:1"><div class="li-name">${i.name}${bdg}</div>${i.expiry&&!i.frozen?`<div class="li-sub">期限: ${i.expiry}</div>`:''}</div><div class="li-val">${i.qty}</div>${fBtn}<button class="btn btn-del" onclick="delIng('${i.id}')">削除</button></div>`;
+      return `<div class="li"><div style="flex:1"><div class="li-name">${i.name}${bdg}</div>${i.expiry&&!i.frozen?`<div class="li-sub">期限: ${i.expiry.slice(0,10)}</div>`:''}</div><div class="li-val">${i.qty}</div>${fBtn}<button class="btn btn-del" onclick="delIng('${i.id}')">削除</button></div>`;
     }).join('');
   }
   document.getElementById('s-total').textContent=ingredients.length;
@@ -686,7 +692,7 @@ async function estimateKcal(){
   try{
     const text=await askClaude(`以下の食事のカロリーをJSONのみで。前置き不要。\n食事：${food}\n{"kcal":数値,"note":"一言コメント"}`,200);
     const json=JSON.parse(text.replace(/```json|```/g,'').trim());
-    const today=new Date().toISOString().slice(0,10);
+    const today=todayStr();
     const entry={id:Date.now().toString(),date:today,food,kcal:json.kcal,note:json.note||'',mealtype:selectedMeal};
     setSt('busy','保存中...');
     if(!foodLog.length){await gasWrite('foodlog',[['id','date','food','kcal','note','mealtype'],[entry.id,entry.date,entry.food,entry.kcal,entry.note,entry.mealtype]])}
@@ -707,7 +713,7 @@ async function saveTarget(){
   renderLog();
 }
 function renderLog(){
-  const today=new Date().toISOString().slice(0,10);
+  const today=todayStr();
   const tE=foodLog.filter(e=>e.date===today),pE=foodLog.filter(e=>e.date!==today);
   const tK=tE.reduce((s,e)=>s+(e.kcal||0),0);
   document.getElementById('kcal-today').textContent=tK;
@@ -730,7 +736,7 @@ function renderLog(){
 async function genWeeklySummary(){
   const btn=document.getElementById('btn-weekly'),ai=document.getElementById('weekly-ai');
   btn.disabled=true;ai.style.display='block';ai.className='aibox dim';ai.textContent='分析中...';
-  const since=new Date();since.setDate(since.getDate()-7);const sinceStr=since.toISOString().slice(0,10);
+  const since=new Date();since.setDate(since.getDate()-7);const sinceStr=`${since.getFullYear()}-${String(since.getMonth()+1).padStart(2,'0')}-${String(since.getDate()).padStart(2,'0')}`;
   const wLog=foodLog.filter(e=>e.date>=sinceStr);
   const wWt=weightLog.filter(w=>w.date>=sinceStr);
   if(!wLog.length&&!wWt.length){ai.textContent='1週間分のデータがまだありません。';btn.disabled=false;return}
@@ -752,7 +758,7 @@ async function genWeeklySummary(){
 async function addWeight(){
   const val=parseFloat(document.getElementById('wt-val').value);
   if(isNaN(val)||val<20||val>300)return toast('正しい体重を入力してください');
-  const today=new Date().toISOString().slice(0,10);setSt('busy','保存中...');
+  const today=todayStr();setSt('busy','保存中...');
   try{
     weightLog=weightLog.filter(w=>w.date!==today);
     weightLog.push({date:today,kg:val});
@@ -775,7 +781,7 @@ function renderWeight(){
   document.getElementById('w-min').textContent=minV;
   if(weightLog.length>=2){
     const wa=new Date();wa.setDate(wa.getDate()-7);
-    const prev=[...weightLog].reverse().find(w=>w.date<=wa.toISOString().slice(0,10));
+    const prev=[...weightLog].reverse().find(w=>w.date<=`${wa.getFullYear()}-${String(wa.getMonth()+1).padStart(2,'0')}-${String(wa.getDate()).padStart(2,'0')}`);
     if(prev){
       const diff=(latest.kg-prev.kg).toFixed(1);
       const el=document.getElementById('w-diff');
