@@ -644,9 +644,11 @@ async function genRecipe(){
   const unitRules=ingList.map(i=>`${i.name} → 必ず「${unitMap[i.name]}」単位で記載`).join('\n');
   const freezeCandidates=ingList.filter(i=>{const d=daysLeft(i.expiry);return d!==null&&d<=3;}).map(i=>{const d=daysLeft(i.expiry);const label=d<0?`期限切れ（${Math.abs(d)}日超過）`:d===0?'今日が期限':`あと${d}日`;return`${i.name}（${label}・在庫${i.qty}）`;});
   const freezeSection=freezeCandidates.length?`【冷凍おすすめ ― 期限3日以内の要注意食材】\n${freezeCandidates.join('\n')}\n→ 今日のレシピで使わない分は何gずつ小分けにして冷凍するか具体的に案内すること。`:`【冷凍おすすめ】\n特になし（期限3日以内の食材なし）`;
+  const recipeHistory=foodLog.filter(e=>e.note==='レシピから記録').slice(0,15).map(e=>`${e.date} ${e.food}`);
+  const historySection=recipeHistory.length?`【これまで作った料理（古い順）】\n${[...recipeHistory].reverse().join('\n')}\n→ 上記の履歴を読んで現在のスキルを判断し、今日は少しだけ難しい・新しい技法を使う料理を提案すること。まだ数回しか作っていない場合はシンプルな一品料理で十分。`:`【料理履歴】\nまだなし（初回）\n→ 包丁を使わずに作れる超シンプルな一品から始めること。`;
   try{
     const text=await askClaude(
-`あなたは料理が完全に初めての人向けのアシスタントです。
+`あなたは料理初心者の専属コーチです。最終目標は「大切な人においしい手料理を振る舞えるようになること」です。
 冷蔵庫の食材（在庫量と単位）：
 ${list}${frozen?`\n冷凍庫：${frozen}`:''}
 
@@ -654,14 +656,18 @@ ${list}${frozen?`\n冷凍庫：${frozen}`:''}
 ${unitRules}
 上記単位以外への換算・言い換え（例: g→個、ml→カップ）は一切禁止。
 
+${historySection}
+
 今日の夕食1品を提案してください。期限が近い食材を優先。${req?`リクエスト：${req}`:'ダイエット中（500〜700kcal目安）。'}
 
 以下の形式で答えてください：
 
 【今日の夕食】
 料理名：
+難易度：（★1〜★5 と一言コメント。例: ★2 火加減の練習）
 使う食材と分量：（各食材の分量は上記単位ルール通りの単位で記載）
 手順：（包丁の持ち方・切り方の名前と動き・火力の目安・焼き色の見極め方・目安時間など、料理が初めての人でも1ステップずつ確実にできるよう丁寧に記載すること）
+今日の上達ポイント：（前回より何が新しくなったか・身につくスキルを1行で）
 推定カロリー：（数値のみ、例: 520kcal）
 
 ${freezeSection}
