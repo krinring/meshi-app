@@ -164,9 +164,14 @@ canvas{display:block;width:100%!important;border-radius:6px}
   <div class="modal">
     <div class="modal-title">✅ 作った！</div>
     <div class="modal-sub">以下の食材を在庫から引きます（調味料は除く）</div>
-    <div id="deduct-list" style="margin-bottom:16px"></div>
+    <div id="deduct-list" style="margin-bottom:14px"></div>
+    <div id="deduct-meal-wrap" style="margin-bottom:14px;display:none">
+      <div class="sec" style="margin-bottom:8px">食事ログにも記録</div>
+      <div id="deduct-meal-info" style="font-size:13px;margin-bottom:10px;color:var(--grn);font-family:'DM Mono',monospace"></div>
+      <div class="row" style="gap:6px" id="deduct-meal-sel"></div>
+    </div>
     <div class="row" style="gap:8px">
-      <button class="btn btn-g" style="flex:1" onclick="executeDeduct()">在庫から引く</button>
+      <button class="btn btn-g" style="flex:1" onclick="executeDeduct()">在庫を更新 ＋ ログ記録</button>
       <button class="btn btn-sm" style="flex:1" onclick="document.getElementById('deduct-modal').style.display='none'">キャンセル</button>
     </div>
   </div>
@@ -340,7 +345,7 @@ const GAS='https://script.google.com/macros/s/AKfycbz-VJzYmfwAl3IQyFp9ROZ59LYJBj
 const CLAUDE_API='https://api.anthropic.com/v1/messages';
 
 let ingredients=[],foodLog=[],weightLog=[],targetKcal=1600,shopItems=[];
-let lastRecipeDeduct=[],selectedMeal='朝';
+let lastRecipeDeduct=[],lastRecipeMeal=null,selectedMeal='朝';
 let cbCtr=0,dbgLines=[],useFetch=true;
 
 // ===== API Key =====
@@ -592,7 +597,8 @@ async function genRecipe(){
   const frozen=ingredients.filter(i=>i.frozen).map(i=>i.name).join('、');
   try{
     const text=await askClaude(
-`冷蔵庫：${list}${frozen?`\n冷凍庫：${frozen}`:''}
+`あなたは料理が完全に初めての人向けのアシスタントです。
+冷蔵庫：${list}${frozen?`\n冷凍庫：${frozen}`:''}
 
 今日の夕食1品を提案してください。期限が近い食材を優先。${req?`リクエスト：${req}`:'ダイエット中（500〜700kcal目安）。'}
 
@@ -600,20 +606,30 @@ async function genRecipe(){
 
 【今日の夕食】
 料理名：
-使う食材と分量：
-手順：
-推定カロリー：
+使う食材と分量：（1人分の具体的なグラム数・個数まで記載）
+手順：（包丁の持ち方・切り方の名前と動き・火力の目安・焼き色の見極め方・目安時間など、料理が初めての人でも1ステップずつ確実にできるよう丁寧に記載すること）
+推定カロリー：（数値のみ、例: 520kcal）
+
+【冷凍おすすめ】
+（在庫の中で冷凍保存すべき食材があれば「〇〇：△△ずつ小分け冷凍」形式で記載、なければ「特になし」）
 
 【明日の下準備】
 （あれば記載、なければ「特になし」）
 
 ---DEDUCT---
 [{"name":"食材名","qty":"使う量"}]
-※塩・砂糖・醤油・みりん・酒・油・バター・小麦粉・片栗粉等の調味料は含めないこと`);
+※塩・砂糖・醤油・みりん・酒・油・バター・小麦粉・片栗粉等の調味料は含めないこと
+
+---MEAL---
+{"name":"料理名","kcal":推定カロリーの数値}`);
     const parts=text.split('---DEDUCT---');
     box.textContent=parts[0].trim();
-    lastRecipeDeduct=[];
-    if(parts[1]){try{lastRecipeDeduct=JSON.parse(parts[1].replace(/```json|```/g,'').trim())}catch(e){}}
+    lastRecipeDeduct=[];lastRecipeMeal=null;
+    if(parts[1]){
+      const parts2=parts[1].split('---MEAL---');
+      try{lastRecipeDeduct=JSON.parse(parts2[0].replace(/```json|```/g,'').trim())}catch(e){}
+      if(parts2[1]){try{lastRecipeMeal=JSON.parse(parts2[1].replace(/```json|```/g,'').trim())}catch(e){}}
+    }
     ph.style.display='none';res.style.display='block';
   }catch(e){ph.className='aibox';ph.textContent='エラー: '+e.message;log('genRecipe:'+e.message,'err')}
   btn.disabled=false;
@@ -623,7 +639,20 @@ function showConfirmMade(){
   el.innerHTML=!lastRecipeDeduct.length
     ?'<div style="color:var(--muted);font-size:13px">食材を特定できませんでした。手動で在庫を更新してください。</div>'
     :lastRecipeDeduct.map(d=>`<div class="ded-item"><span>${d.name}</span><span style="color:var(--muted);font-family:'DM Mono',monospace;font-size:12px">${d.qty||''}</span></div>`).join('');
+  const mw=document.getElementById('deduct-meal-wrap');
+  const mi=document.getElementById('deduct-meal-info');
+  const ms=document.getElementById('deduct-meal-sel');
+  if(lastRecipeMeal){
+    mi.textContent=`${lastRecipeMeal.name}  ${lastRecipeMeal.kcal}kcal`;
+    const types=['朝','昼','夜','間食'];
+    ms.innerHTML=types.map(t=>`<button class="btn btn-sm meal-sel${t===selectedMeal?' on':''}" onclick="setMadeMeal('${t}')">${t}</button>`).join('');
+    mw.style.display='block';
+  }else{mw.style.display='none'}
   document.getElementById('deduct-modal').style.display='flex';
+}
+function setMadeMeal(t){
+  selectedMeal=t;
+  document.querySelectorAll('#deduct-meal-sel .meal-sel').forEach(b=>b.classList.toggle('on',b.textContent===t));
 }
 async function executeDeduct(){
   document.getElementById('deduct-modal').style.display='none';
@@ -640,7 +669,13 @@ async function executeDeduct(){
   });
   try{
     await gasWrite('food',[['id','name','qty','expiry','frozen'],...ingredients.map(i=>[i.id,i.name,i.qty,i.expiry,i.frozen?'1':'0'])]);
-    renderIng();setSt('ok','同期済み');toast('在庫を更新しました！');
+    if(lastRecipeMeal){
+      const entry={id:Date.now().toString(),date:todayStr(),food:lastRecipeMeal.name,kcal:lastRecipeMeal.kcal,note:'レシピから記録',mealtype:selectedMeal};
+      if(!foodLog.length){await gasWrite('foodlog',[['id','date','food','kcal','note','mealtype'],[entry.id,entry.date,entry.food,entry.kcal,entry.note,entry.mealtype]])}
+      else{await gasAppend('foodlog',[[entry.id,entry.date,entry.food,entry.kcal,entry.note,entry.mealtype]])}
+      foodLog.unshift(entry);renderLog();
+    }
+    renderIng();setSt('ok','同期済み');toast('在庫を更新しました！'+( lastRecipeMeal?`  ${lastRecipeMeal.name}を${selectedMeal}に記録`:''));
   }catch(e){log('executeDeduct:'+e.message,'err');setSt('err','更新失敗')}
 }
 
