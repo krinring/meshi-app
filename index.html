@@ -2,14 +2,14 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>めし管理</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍚</text></svg>">
 <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;700;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#0f0f0f;--sur:#1a1a1a;--sur2:#212121;--bdr:#2a2a2a;--grn:#c8f55a;--ora:#f5a34e;--tel:#5af5c8;--red:#ff5f5f;--blu:#5ab4f5;--txt:#f0f0f0;--muted:#777;--tab:56px}
+:root{--bg:#0f0f0f;--sur:#1a1a1a;--sur2:#212121;--bdr:#2a2a2a;--grn:#c8f55a;--ora:#f5a34e;--tel:#5af5c8;--red:#ff5f5f;--blu:#5ab4f5;--txt:#f0f0f0;--muted:#777;--tab:56px;--safe:env(safe-area-inset-bottom,0px)}
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--txt);font-family:'Zen Kaku Gothic New',sans-serif;max-width:480px;margin:0 auto;min-height:100vh;padding-bottom:calc(var(--tab)+20px)}
+body{background:var(--bg);color:var(--txt);font-family:'Zen Kaku Gothic New',sans-serif;max-width:480px;margin:0 auto;min-height:100vh;padding-bottom:calc(var(--tab) + var(--safe) + 24px)}
 .hdr{position:sticky;top:0;z-index:50;background:var(--bg);border-bottom:1px solid var(--bdr);padding:14px 16px;display:flex;align-items:center;justify-content:space-between}
 .hdr-title{font-size:20px;font-weight:900;letter-spacing:-0.5px}
 .hdr-title em{color:var(--grn);font-style:normal}
@@ -18,7 +18,7 @@ body{background:var(--bg);color:var(--txt);font-family:'Zen Kaku Gothic New',san
 .dot{width:6px;height:6px;border-radius:50%;background:var(--muted);flex-shrink:0}
 .dot.ok{background:var(--grn)}.dot.busy{background:var(--ora);animation:blink .8s infinite}.dot.err{background:var(--red)}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
-.tabbar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;height:var(--tab);background:#111;border-top:1px solid var(--bdr);display:flex;z-index:100}
+.tabbar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;height:calc(var(--tab) + var(--safe));padding-bottom:var(--safe);background:#111;border-top:1px solid var(--bdr);display:flex;z-index:100}
 .tbtn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:none;background:none;color:var(--muted);font-family:'Zen Kaku Gothic New',sans-serif;font-size:10px;cursor:pointer;transition:color .2s}
 .tbtn .ic{font-size:20px;line-height:1}.tbtn.on{color:var(--grn)}
 /* Desktop 2-col layout */
@@ -84,7 +84,7 @@ select option{background:var(--sur2)}textarea{resize:none}
 .chip{background:var(--sur2);border:1px solid var(--bdr);border-radius:20px;padding:4px 10px;font-size:12px;cursor:pointer;color:var(--muted);transition:all .15s}
 .chip:hover{border-color:var(--grn);color:var(--grn)}
 .empty{text-align:center;color:var(--muted);padding:28px 0;font-size:13px}.empty .e{font-size:28px;margin-bottom:6px}
-.toast{position:fixed;bottom:calc(var(--tab)+14px);left:50%;transform:translateX(-50%) translateY(12px);background:var(--grn);color:#0f0f0f;font-weight:700;padding:9px 18px;border-radius:30px;font-size:13px;opacity:0;transition:all .25s;pointer-events:none;z-index:999;white-space:nowrap}
+.toast{position:fixed;bottom:calc(var(--tab) + var(--safe) + 14px);left:50%;transform:translateX(-50%) translateY(12px);background:var(--grn);color:#0f0f0f;font-weight:700;padding:9px 18px;border-radius:30px;font-size:13px;opacity:0;transition:all .25s;pointer-events:none;z-index:999;white-space:nowrap}
 .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 @media(min-width:900px){.toast{bottom:20px}}
 canvas{display:block;width:100%!important;border-radius:6px}
