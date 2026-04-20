@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>めし管理</title>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;700;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0f0f0f;--sur:#1a1a1a;--sur2:#212121;--bdr:#2a2a2a;--grn:#c8f55a;--ora:#f5a34e;--tel:#5af5c8;--red:#ff5f5f;--txt:#f0f0f0;--muted:#777;--tab:56px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--txt);font-family:'Zen Kaku Gothic New',sans-serif;max-width:480px;margin:0 auto;min-height:100vh;padding-bottom:calc(var(--tab) + 20px)}
+.hdr{position:sticky;top:0;z-index:50;background:var(--bg);border-bottom:1px solid var(--bdr);padding:14px 16px;display:flex;align-items:center;justify-content:space-between}
+.hdr-title{font-size:20px;font-weight:900;letter-spacing:-0.5px}
+.hdr-title em{color:var(--grn);font-style:normal}
+.hdr-right{display:flex;align-items:center;gap:10px}
+.sync{display:flex;align-items:center;gap:5px;font-size:10px;font-family:'DM Mono',monospace;color:var(--muted);cursor:pointer;user-select:none}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--muted);flex-shrink:0}
+.dot.ok{background:var(--grn)}.dot.busy{background:var(--ora);animation:blink .8s infinite}.dot.err{background:var(--red)}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+.tabbar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;height:var(--tab);background:#111;border-top:1px solid var(--bdr);display:flex;z-index:100}
+.tbtn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:none;background:none;color:var(--muted);font-family:'Zen Kaku Gothic New',sans-serif;font-size:10px;cursor:pointer;transition:color .2s}
+.tbtn .ic{font-size:20px;line-height:1}.tbtn.on{color:var(--grn)}
+.pnl{display:none;padding:14px}.pnl.on{display:block}
+.card{background:var(--sur);border:1px solid var(--bdr);border-radius:12px;padding:14px;margin-bottom:10px}
+.sec{font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);font-family:'DM Mono',monospace;margin-bottom:10px}
+input,textarea,select{background:var(--sur2);border:1px solid var(--bdr);border-radius:8px;color:var(--txt);font-family:'Zen Kaku Gothic New',sans-serif;font-size:14px;padding:10px 12px;width:100%;outline:none;transition:border-color .2s}
+input:focus,textarea:focus,select:focus{border-color:var(--grn)}
+select option{background:var(--sur2)}textarea{resize:none}
+.lbl{font-size:11px;color:var(--muted);margin-bottom:5px;display:block;font-family:'DM Mono',monospace}
+.fg{margin-bottom:10px}.row{display:flex;gap:8px;align-items:center}
+.btn{border:none;border-radius:8px;font-family:'Zen Kaku Gothic New',sans-serif;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;transition:transform .1s,opacity .15s}
+.btn:active{transform:scale(.97)}.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn-g{background:var(--grn);color:#0f0f0f;padding:11px 16px;font-size:14px;width:100%}
+.btn-o{background:var(--ora);color:#0f0f0f;padding:11px 16px;font-size:14px;width:100%}
+.btn-t{background:var(--tel);color:#0f0f0f;padding:10px 14px;font-size:14px;font-weight:700}
+.btn-del{background:transparent;color:var(--red);border:1px solid var(--red);padding:5px 9px;font-size:11px}
+.btn-sm{background:var(--sur2);color:var(--txt);border:1px solid var(--bdr);padding:8px 14px;font-size:12px;font-weight:700}
+.btn-icon{background:none;border:none;color:var(--muted);font-size:16px;cursor:pointer;padding:2px 4px;line-height:1}
+.btn-icon:hover{color:var(--txt)}
+.stats{display:flex;gap:8px;margin-bottom:12px}
+.sbox{flex:1;background:var(--sur);border:1px solid var(--bdr);border-radius:10px;padding:10px 8px;text-align:center}
+.sval{font-size:20px;font-weight:900;font-family:'DM Mono',monospace;color:var(--grn);line-height:1}
+.slbl{font-size:10px;color:var(--muted);margin-top:3px}
+.li{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--bdr);gap:8px}
+.li:last-child{border-bottom:none}
+.li-name{font-size:14px;font-weight:700;flex:1}
+.li-sub{font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;margin-top:2px}
+.li-val{font-family:'DM Mono',monospace;font-size:13px;color:var(--grn);min-width:52px;text-align:right}
+.bdg{display:inline-block;padding:1px 6px;border-radius:20px;font-size:10px;font-weight:700;font-family:'DM Mono',monospace;margin-left:4px}
+.bdg-o{background:rgba(245,163,78,.15);color:var(--ora)}.bdg-r{background:rgba(255,95,95,.15);color:var(--red)}
+.aibox{background:var(--sur2);border:1px solid var(--bdr);border-left:3px solid var(--grn);border-radius:8px;padding:14px;font-size:13px;line-height:1.8;white-space:pre-wrap;margin-top:10px}
+.aibox.dim{color:var(--muted);font-style:italic}
+.pgwrap{background:var(--sur2);border-radius:4px;height:6px;overflow:hidden;margin-top:8px}
+.pgbar{height:100%;background:var(--grn);border-radius:4px;transition:width .4s}.pgbar.ov{background:var(--red)}
+.mtabs{display:flex;gap:6px;margin-bottom:12px}
+.mtab{flex:1;padding:8px;font-size:12px;font-weight:700;font-family:'Zen Kaku Gothic New',sans-serif;background:var(--sur2);border:1px solid var(--bdr);border-radius:8px;color:var(--muted);cursor:pointer;text-align:center}
+.mtab.on{background:var(--grn);color:#0f0f0f;border-color:var(--grn)}
+.shi{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--bdr)}.shi:last-child{border-bottom:none}
+.shck{width:20px;height:20px;border-radius:6px;border:2px solid var(--bdr);flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;font-size:11px}
+.shck.on{background:var(--grn);border-color:var(--grn);color:#0f0f0f}
+.empty{text-align:center;color:var(--muted);padding:28px 0;font-size:13px}.empty .e{font-size:28px;margin-bottom:6px}
+.toast{position:fixed;bottom:calc(var(--tab) + 14px);left:50%;transform:translateX(-50%) translateY(12px);background:var(--grn);color:#0f0f0f;font-weight:700;padding:9px 18px;border-radius:30px;font-size:13px;opacity:0;transition:all .25s;pointer-events:none;z-index:999;white-space:nowrap}
+.toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+canvas{display:block;width:100%!important;border-radius:6px}
+#dbg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.96);z-index:9999;flex-direction:column;padding:16px;gap:10px}
+#dbg.on{display:flex}
+#dbg-log{flex:1;overflow-y:auto;font-family:'DM Mono',monospace;font-size:11px;line-height:1.9;color:#ccc;white-space:pre-wrap;background:var(--sur2);border:1px solid var(--bdr);border-radius:8px;padding:10px}
+.derr{color:var(--red)}.dok{color:var(--grn)}.dinf{color:var(--ora)}
+/* API Key Modal */
+.modal-ov{position:fixed;inset:0;background:rgba(0,0,0,.93);z-index:9998;display:flex;align-items:center;justify-content:center;padding:20px}
+.modal{background:var(--sur);border:1px solid var(--bdr);border-radius:16px;padding:24px;width:100%;max-width:360px}
+.modal-title{font-size:18px;font-weight:900;margin-bottom:6px}
+.modal-sub{font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.7;font-family:'DM Mono',monospace}
+.modal-link{color:var(--muted);font-size:11px;font-family:'DM Mono',monospace;text-decoration:none}
+.modal-link:hover{color:var(--grn)}
+</style>
+</head>
+<body>
+
+<!-- API Key Modal -->
+<div id="key-modal" class="modal-ov" style="display:none">
+  <div class="modal">
+    <div class="modal-title">め<em style="color:var(--grn);font-style:normal">し管理</em> セットアップ</div>
+    <div class="modal-sub">Claude APIキーを入力してください。<br>キーはこのデバイスのみ（localStorage）に保存されます。</div>
+    <div class="fg">
+      <label class="lbl">Claude API Key</label>
+      <input id="key-in" type="password" placeholder="sk-ant-api03-..." autocomplete="off">
+    </div>
+    <button class="btn btn-g" onclick="saveKey()" style="margin-bottom:12px">保存して開始</button>
+    <div style="text-align:center">
+      <a class="modal-link" href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">APIキーを取得 →</a>
+    </div>
+  </div>
+</div>
+
+<div class="hdr">
+  <div class="hdr-title">め<em>し管理</em></div>
+  <div class="hdr-right">
+    <button class="btn-icon" onclick="showKeyModal()" title="APIキー設定">⚙</button>
+    <div class="sync" onclick="toggleDbg()" title="タップでデバッグ">
+      <div class="dot busy" id="dot"></div><span id="sync-txt">接続中...</span>
+    </div>
+  </div>
+</div>
+
+<!-- Debug -->
+<div id="dbg">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+    <div class="sec" style="margin:0;color:var(--ora)">🐛 デバッグログ</div>
+    <span style="font-size:10px;color:var(--muted);font-family:'DM Mono',monospace">ステータスをタップで閉じる</span>
+  </div>
+  <div id="dbg-log"></div>
+  <div style="display:flex;gap:8px;margin-top:4px">
+    <button class="btn btn-sm" style="flex:1" onclick="init()">🔄 再接続</button>
+    <button class="btn btn-sm" style="flex:1" onclick="document.getElementById('dbg-log').innerHTML='';dbgLines=[]">🗑 クリア</button>
+    <button class="btn btn-sm" style="flex:1" onclick="toggleDbg()">✕ 閉じる</button>
+  </div>
+</div>
+
+<!-- 食材 -->
+<div class="pnl on" id="pnl-ing">
+  <div class="stats">
+    <div class="sbox"><div class="sval" id="s-total">0</div><div class="slbl">食材数</div></div>
+    <div class="sbox"><div class="sval" style="color:var(--ora)" id="s-soon">0</div><div class="slbl">期限近い</div></div>
+    <div class="sbox"><div class="sval" style="color:var(--red)" id="s-exp">0</div><div class="slbl">期限切れ</div></div>
+  </div>
+  <div class="card">
+    <div class="sec">食材を追加</div>
+    <div class="fg"><label class="lbl">食材名</label><input id="i-name" placeholder="例：白菜・豚バラ"></div>
+    <div class="row" style="margin-bottom:10px">
+      <div style="flex:1"><label class="lbl">数量</label><input id="i-qty" placeholder="例：300g"></div>
+      <div style="flex:1"><label class="lbl">消費期限</label><input id="i-exp" type="date"></div>
+    </div>
+    <button class="btn btn-g" onclick="addIng()">＋ 追加</button>
+  </div>
+  <div class="sec" style="margin-top:4px">在庫リスト</div>
+  <div class="card"><div id="ing-list"><div class="empty"><div class="e">🥬</div>食材を登録してください</div></div></div>
+</div>
+
+<!-- レシピ -->
+<div class="pnl" id="pnl-rec">
+  <div class="mtabs">
+    <div class="mtab on" onclick="rTab('gen',this)">レシピ生成</div>
+    <div class="mtab" onclick="rTab('shop',this)">買い物リスト</div>
+  </div>
+  <div id="rt-gen">
+    <div class="card">
+      <div class="sec">レシピを生成</div>
+      <div class="fg"><label class="lbl">何日分？</label>
+        <select id="r-days"><option value="1">1日分</option><option value="2">2日分</option><option value="3" selected>3日分</option><option value="5">5日分</option><option value="7">1週間分</option></select>
+      </div>
+      <div class="fg"><label class="lbl">リクエスト（任意）</label><input id="r-req" placeholder="例：さっぱり系・節食中心"></div>
+      <button class="btn btn-g" id="btn-rec" onclick="genRecipe()">🍳 レシピ生成</button>
+    </div>
+    <div class="aibox dim" id="rec-box">在庫食材を登録してから生成してください。</div>
+  </div>
+  <div id="rt-shop" style="display:none">
+    <div class="card">
+      <div class="sec">買い物リスト生成</div>
+      <div class="fg"><label class="lbl">何日分？</label>
+        <select id="sh-days"><option value="3">3日分</option><option value="5">5日分</option><option value="7">1週間分</option></select>
+      </div>
+      <button class="btn btn-o" id="btn-shop" onclick="genShop()">🛒 リスト生成</button>
+    </div>
+    <div class="card"><div id="shop-list"><div class="empty"><div class="e">🛒</div>生成ボタンを押してください</div></div></div>
+    <div class="aibox dim" id="shop-ai" style="display:none"></div>
+  </div>
+</div>
+
+<!-- ログ -->
+<div class="pnl" id="pnl-log">
+  <div class="card">
+    <div class="sec">今日のカロリー</div>
+    <div class="row" style="align-items:flex-end;gap:4px;margin-bottom:4px">
+      <div style="font-size:34px;font-weight:900;font-family:'DM Mono',monospace;color:var(--grn)" id="kcal-today">0</div>
+      <div style="color:var(--muted);font-size:13px;padding-bottom:6px">/ <span id="kcal-target">1600</span> kcal</div>
+    </div>
+    <div class="pgwrap"><div class="pgbar" id="kcal-bar" style="width:0%"></div></div>
+    <div style="margin-top:10px;display:flex;gap:8px;align-items:center">
+      <label class="lbl" style="margin:0;white-space:nowrap">目標 kcal</label>
+      <input type="number" id="target-in" value="1600" style="width:88px;padding:6px 10px" onchange="saveTarget()">
+    </div>
+  </div>
+  <div class="card">
+    <div class="sec">食事を記録</div>
+    <div class="fg"><textarea id="log-food" rows="2" placeholder="例：松屋の牛丼並・カフェラテ"></textarea></div>
+    <button class="btn btn-o" id="btn-est" onclick="estimateKcal()">🤖 カロリー推定して記録</button>
+    <div class="aibox dim" id="log-ai" style="display:none"></div>
+  </div>
+  <div class="sec" style="margin-top:4px">今日の記録</div>
+  <div class="card"><div id="log-today"><div class="empty"><div class="e">🍽</div>まだ記録なし</div></div></div>
+  <div class="sec" style="margin-top:10px">過去の記録</div>
+  <div class="card"><div id="log-past"><div class="empty"><div class="e">📅</div>記録がありません</div></div></div>
+</div>
+
+<!-- 体重 -->
+<div class="pnl" id="pnl-wt">
+  <div class="card">
+    <div class="sec">体重を記録</div>
+    <div class="row">
+      <input id="wt-val" type="number" step="0.1" placeholder="例：54.5" style="font-size:18px">
+      <span style="color:var(--muted);font-size:14px;flex-shrink:0">kg</span>
+      <button class="btn btn-t" onclick="addWeight()" style="flex-shrink:0">記録</button>
+    </div>
+  </div>
+  <div class="stats">
+    <div class="sbox"><div class="sval" style="font-size:16px" id="w-now">--</div><div class="slbl">現在 kg</div></div>
+    <div class="sbox"><div class="sval" style="font-size:16px" id="w-diff">--</div><div class="slbl">前週比</div></div>
+    <div class="sbox"><div class="sval" style="font-size:16px" id="w-min">--</div><div class="slbl">最低 kg</div></div>
+  </div>
+  <div class="card">
+    <div class="sec">推移グラフ</div>
+    <canvas id="w-chart" height="130"></canvas>
+    <div id="w-empty" class="empty" style="display:none"><div class="e">✏️</div>記録するとグラフ表示</div>
+  </div>
+  <div class="sec" style="margin-top:10px">履歴</div>
+  <div class="card"><div id="w-hist"><div class="empty"><div class="e">📋</div>記録がありません</div></div></div>
+</div>
+
+<div class="tabbar">
+  <button class="tbtn on" onclick="tab('ing',this)"><span class="ic">🥬</span>食材</button>
+  <button class="tbtn" onclick="tab('rec',this)"><span class="ic">🍳</span>レシピ</button>
+  <button class="tbtn" onclick="tab('log',this)"><span class="ic">📝</span>ログ</button>
+  <button class="tbtn" onclick="tab('wt',this)"><span class="ic">⚖️</span>体重</button>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const GAS = 'https://script.google.com/macros/s/AKfycbz-VJzYmfwAl3IQyFp9ROZ59LYJBjPia8x8fGvLDH_1Tzrd7DD0OUE1C3gygwzdGsM8/exec';
+const CLAUDE_API = 'https://api.anthropic.com/v1/messages';
+
+let ingredients=[], foodLog=[], weightLog=[], targetKcal=1600, shopItems=[];
+let cbCtr=0, dbgLines=[], useFetch=true;
+
+// ===== API Key Modal =====
+function showKeyModal(){
+  const existing=localStorage.getItem('claude_api_key')||'';
+  document.getElementById('key-in').value=existing;
+  document.getElementById('key-modal').style.display='flex';
+}
+function saveKey(){
+  const k=document.getElementById('key-in').value.trim();
+  if(!k){return toast('APIキーを入力してください')}
+  if(!k.startsWith('sk-ant-')){return toast('sk-ant- で始まるキーを入力してください')}
+  localStorage.setItem('claude_api_key',k);
+  document.getElementById('key-modal').style.display='none';
+  init();
+}
+
+// ===== Debug =====
+function toggleDbg(){document.getElementById('dbg').classList.toggle('on')}
+function log(msg,type=''){
+  const ts=new Date().toTimeString().slice(0,8);
+  const cls=type?` class="d${type}"`:' class="dinf"';
+  dbgLines.push(`<span${cls}>[${ts}] ${String(msg).replace(/</g,'&lt;')}</span>`);
+  if(dbgLines.length>300) dbgLines.shift();
+  const el=document.getElementById('dbg-log');
+  el.innerHTML=dbgLines.join('\n');
+  el.scrollTop=el.scrollHeight;
+}
+
+// ===== GAS通信: fetchを試行 → 失敗したらJSONP =====
+async function gasCall(params) {
+  const qs = Object.entries(params).map(([k,v])=>encodeURIComponent(k)+'='+encodeURIComponent(v)).join('&');
+
+  if (useFetch) {
+    try {
+      log(`fetch→ ${params.action}[${params.sheet||''}]`);
+      const r = await fetch(GAS+'?'+qs, {redirect:'follow'});
+      const text = await r.text();
+      log(`fetch raw: ${text.slice(0,80)}`);
+      const json = JSON.parse(text);
+      if (json.ok !== undefined) {
+        log(`fetch OK`, 'ok');
+        return json;
+      }
+    } catch(e) {
+      log(`fetchに失敗(${e.message}) → JSONP切替`, 'err');
+      useFetch = false;
+    }
+  }
+
+  return jsonpCall(params);
+}
+
+function jsonpCall(params) {
+  return new Promise((resolve, reject) => {
+    const name = '__cb' + (cbCtr++);
+    let done = false;
+    const timer = setTimeout(()=>{
+      if(done) return; done=true;
+      cleanup(); reject(new Error('JSONP timeout 15s'));
+    }, 15000);
+    window[name] = (data) => {
+      if(done) return; done=true;
+      clearTimeout(timer); cleanup(); resolve(data);
+    };
+    const cleanup = () => {
+      delete window[name];
+      const s=document.getElementById('_s'+name);
+      if(s) s.remove();
+    };
+    const qs = Object.entries({...params, callback:name})
+      .map(([k,v])=>encodeURIComponent(k)+'='+encodeURIComponent(v)).join('&');
+    const script = document.createElement('script');
+    script.id = '_s'+name;
+    script.src = GAS+'?'+qs;
+    script.onerror = ()=>{
+      if(done) return; done=true;
+      clearTimeout(timer); cleanup();
+      reject(new Error('JSONP script load error'));
+    };
+    log(`jsonp→ ${params.action}[${params.sheet||''}]`);
+    document.head.appendChild(script);
+  });
+}
+
+async function gasRead(sheet) {
+  const res = await gasCall({action:'read', sheet});
+  if (!res.ok) throw new Error(res.error||'read failed');
+  log(`read OK: ${sheet} (${(res.data||[]).length}行)`, 'ok');
+  return res.data || [];
+}
+async function gasWrite(sheet, rows) {
+  const res = await gasCall({action:'write', sheet, rows:JSON.stringify(rows)});
+  if (!res.ok) throw new Error(res.error||'write failed');
+  log(`write OK: ${sheet}`, 'ok');
+}
+async function gasAppend(sheet, rows) {
+  const res = await gasCall({action:'append', sheet, rows:JSON.stringify(rows)});
+  if (!res.ok) throw new Error(res.error||'append failed');
+  log(`append OK: ${sheet}`, 'ok');
+}
+
+// ===== 行ヘッダースキップ =====
+function parseRows(rows) {
+  if (!rows||!rows.length) return [];
+  const first = rows[0];
+  const isHeader = first.length>0 && typeof first[0]==='string' && isNaN(first[0]) && first[0]!=='';
+  return isHeader ? rows.slice(1) : rows;
+}
+
+// ===== Init =====
+async function init() {
+  useFetch = true;
+  setSt('busy','接続中...');
+  log('=== init ===');
+  try {
+    const [iD,lD,wD,cD] = await Promise.all([
+      gasRead('food'), gasRead('foodlog'), gasRead('weight'), gasRead('config')
+    ]);
+    ingredients = parseRows(iD).map(r=>({id:String(r[0]),name:String(r[1]||''),qty:String(r[2]||'適量'),expiry:String(r[3]||'')})).filter(r=>r.name);
+    foodLog     = parseRows(lD).map(r=>({id:String(r[0]),date:String(r[1]||''),food:String(r[2]||''),kcal:parseInt(r[3])||0,note:String(r[4]||'')})).filter(r=>r.food);
+    weightLog   = parseRows(wD).map(r=>({date:String(r[0]),kg:parseFloat(r[1])})).filter(r=>r.date&&!isNaN(r.kg));
+    weightLog.sort((a,b)=>a.date.localeCompare(b.date));
+    const cfg = Object.fromEntries(parseRows(cD).map(r=>[String(r[0]),String(r[1]||'')]));
+    targetKcal = parseInt(cfg.targetKcal)||1600;
+    document.getElementById('target-in').value = targetKcal;
+    document.getElementById('kcal-target').textContent = targetKcal;
+    log(`食材:${ingredients.length} ログ:${foodLog.length} 体重:${weightLog.length}`, 'ok');
+    renderAll();
+    setSt('ok','同期済み');
+  } catch(e) {
+    log('init ERROR: '+e.message, 'err');
+    setSt('err','失敗（タップで詳細）');
+    toast('接続失敗 → ステータスタップで詳細確認');
+  }
+}
+
+function setSt(s,t){document.getElementById('dot').className='dot '+s;document.getElementById('sync-txt').textContent=t}
+function renderAll(){renderIng();renderLog();renderWeight()}
+
+// ===== Tabs =====
+function tab(name,btn){
+  document.querySelectorAll('.pnl').forEach(p=>p.classList.remove('on'));
+  document.querySelectorAll('.tbtn').forEach(b=>b.classList.remove('on'));
+  document.getElementById('pnl-'+name).classList.add('on'); btn.classList.add('on');
+}
+function rTab(name,btn){
+  document.querySelectorAll('.mtab').forEach(b=>b.classList.remove('on')); btn.classList.add('on');
+  document.getElementById('rt-gen').style.display=name==='gen'?'':'none';
+  document.getElementById('rt-shop').style.display=name==='shop'?'':'none';
+}
+
+// ===== Toast =====
+function toast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('on');
+  setTimeout(()=>t.classList.remove('on'),2500);
+}
+
+// ===== Claude =====
+async function askClaude(prompt,maxTok=1000){
+  const apiKey=localStorage.getItem('claude_api_key')||'';
+  if(!apiKey){showKeyModal();throw new Error('APIキーが未設定です')}
+  log('Claudeへ '+prompt.slice(0,50)+'...');
+  const r=await fetch(CLAUDE_API,{method:'POST',headers:{
+    'Content-Type':'application/json',
+    'x-api-key':apiKey,
+    'anthropic-version':'2023-06-01',
+    'anthropic-dangerous-direct-browser-access':'true'
+  },body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:maxTok,messages:[{role:'user',content:prompt}]})});
+  const d=await r.json();
+  if(d.error) throw new Error(d.error.message);
+  log('Claude OK','ok');
+  return d.content?.[0]?.text||'';
+}
+
+// ===== Ingredients =====
+async function addIng(){
+  const name=document.getElementById('i-name').value.trim();
+  const qty=document.getElementById('i-qty').value.trim()||'適量';
+  const exp=document.getElementById('i-exp').value;
+  if(!name) return toast('食材名を入力してください');
+  setSt('busy','保存中...');
+  try {
+    const id=Date.now().toString();
+    if(!ingredients.length){
+      await gasWrite('food',[['id','name','qty','expiry'],[id,name,qty,exp]]);
+    } else {
+      await gasAppend('food',[[id,name,qty,exp]]);
+    }
+    ingredients.push({id,name,qty,expiry:exp});
+    document.getElementById('i-name').value='';
+    document.getElementById('i-qty').value='';
+    document.getElementById('i-exp').value='';
+    renderIng(); setSt('ok','同期済み'); toast('追加しました！');
+  } catch(e){log('addIng:'+e.message,'err');setSt('err','保存失敗');toast('保存失敗')}
+}
+
+async function delIng(id){
+  setSt('busy','削除中...');
+  try {
+    ingredients=ingredients.filter(i=>i.id!==id);
+    await gasWrite('food',[['id','name','qty','expiry'],...ingredients.map(i=>[i.id,i.name,i.qty,i.expiry])]);
+    renderIng(); setSt('ok','同期済み'); toast('削除しました');
+  } catch(e){log('delIng:'+e.message,'err');setSt('err','削除失敗')}
+}
+
+function expSt(ex){
+  if(!ex) return null;
+  const d=Math.floor((new Date(ex)-new Date().setHours(0,0,0,0))/86400000);
+  return d<0?'exp':d<=2?'soon':'ok';
+}
+
+function renderIng(){
+  const el=document.getElementById('ing-list');
+  let soon=0,exp=0;
+  if(!ingredients.length){el.innerHTML='<div class="empty"><div class="e">🥬</div>食材を登録してください</div>';}
+  else{
+    el.innerHTML=ingredients.map(i=>{
+      const st=expSt(i.expiry);
+      if(st==='exp') exp++; else if(st==='soon') soon++;
+      const bdg=st==='exp'?'<span class="bdg bdg-r">期限切れ</span>':st==='soon'?'<span class="bdg bdg-o">期限近</span>':'';
+      return `<div class="li"><div><div class="li-name">${i.name}${bdg}</div>${i.expiry?`<div class="li-sub">期限: ${i.expiry}</div>`:''}</div><div class="li-val">${i.qty}</div><button class="btn btn-del" onclick="delIng('${i.id}')">削除</button></div>`;
+    }).join('');
+  }
+  document.getElementById('s-total').textContent=ingredients.length;
+  document.getElementById('s-soon').textContent=soon;
+  document.getElementById('s-exp').textContent=exp;
+}
+
+// ===== Recipe =====
+async function genRecipe(){
+  if(!ingredients.length) return toast('先に食材を登録してください');
+  const days=document.getElementById('r-days').value;
+  const req=document.getElementById('r-req').value;
+  const btn=document.getElementById('btn-rec'),box=document.getElementById('rec-box');
+  btn.disabled=true; box.className='aibox dim'; box.textContent='生成中...';
+  const list=ingredients.map(i=>`${i.name}（${i.qty}${i.expiry?`・期限${i.expiry}`:''}）`).join('、');
+  try {
+    const text=await askClaude(`冷蔵庫の食材：${list}\n\n${days}日分の夕食レシピを提案してください。${req?`リクエスト：${req}`:''}\n各日ごとに料理名・使う食材と分量・簡単な手順・推定カロリーを書いてください。ダイエット中なので1食500〜700kcal目安。期限近い食材を優先してください。`);
+    box.className='aibox'; box.textContent=text;
+  } catch(e){box.className='aibox';box.textContent='エラー: '+e.message;log('genRecipe:'+e.message,'err')}
+  btn.disabled=false;
+}
+
+async function genShop(){
+  const days=document.getElementById('sh-days').value;
+  const btn=document.getElementById('btn-shop'),ai=document.getElementById('shop-ai');
+  btn.disabled=true; ai.style.display='block'; ai.className='aibox dim'; ai.textContent='生成中...';
+  const list=ingredients.length?ingredients.map(i=>`${i.name}（${i.qty}）`).join('、'):'なし';
+  try {
+    const text=await askClaude(`現在の在庫：${list}\n${days}日分の夕食に必要な買い物リストをJSONのみで返してください。前置き不要。\n{"items":[{"name":"品名","qty":"量","category":"野菜/肉/魚/乳製品/調味料/その他"}]}`,600);
+    const json=JSON.parse(text.replace(/```json|```/g,'').trim());
+    shopItems=json.items.map((it,i)=>({...it,id:i,checked:false}));
+    renderShop(); ai.style.display='none';
+  } catch(e){ai.className='aibox';ai.textContent='エラー: '+e.message;log('genShop:'+e.message,'err')}
+  btn.disabled=false;
+}
+
+function toggleShop(id){shopItems=shopItems.map(it=>it.id===id?{...it,checked:!it.checked}:it);renderShop()}
+function renderShop(){
+  const el=document.getElementById('shop-list');
+  if(!shopItems.length){el.innerHTML='<div class="empty"><div class="e">🛒</div>生成ボタンを押してください</div>';return}
+  const cats=[...new Set(shopItems.map(i=>i.category))];
+  el.innerHTML=cats.map(cat=>`<div style="margin-bottom:10px"><div class="lbl" style="margin-bottom:4px">${cat}</div>${shopItems.filter(i=>i.category===cat).map(it=>`<div class="shi"><div class="shck ${it.checked?'on':''}" onclick="toggleShop(${it.id})">${it.checked?'✓':''}</div><span style="flex:1;font-size:14px;${it.checked?'text-decoration:line-through;color:var(--muted)':''}">${it.name}</span><span style="font-size:12px;font-family:'DM Mono',monospace;color:var(--muted)">${it.qty}</span></div>`).join('')}</div>`).join('');
+}
+
+// ===== Food Log =====
+async function estimateKcal(){
+  const food=document.getElementById('log-food').value.trim();
+  if(!food) return toast('食べたものを入力してください');
+  const btn=document.getElementById('btn-est'),ai=document.getElementById('log-ai');
+  btn.disabled=true; ai.style.display='block'; ai.className='aibox dim'; ai.textContent='推定中...';
+  try {
+    const text=await askClaude(`以下の食事のカロリーをJSONのみで返してください。前置き不要。\n食事：${food}\n{"kcal":数値,"note":"一言コメント"}`,200);
+    const json=JSON.parse(text.replace(/```json|```/g,'').trim());
+    const today=new Date().toISOString().slice(0,10);
+    const entry={id:Date.now().toString(),date:today,food,kcal:json.kcal,note:json.note||''};
+    setSt('busy','保存中...');
+    if(!foodLog.length){
+      await gasWrite('foodlog',[['id','date','food','kcal','note'],[entry.id,entry.date,entry.food,entry.kcal,entry.note]]);
+    } else {
+      await gasAppend('foodlog',[[entry.id,entry.date,entry.food,entry.kcal,entry.note]]);
+    }
+    foodLog.unshift(entry);
+    ai.className='aibox'; ai.textContent=`推定 ${json.kcal} kcal → ${json.note}`;
+    document.getElementById('log-food').value='';
+    renderLog(); setSt('ok','同期済み');
+  } catch(e){ai.className='aibox';ai.textContent='エラー: '+e.message;log('estimateKcal:'+e.message,'err');setSt('err','保存失敗')}
+  btn.disabled=false;
+}
+
+async function saveTarget(){
+  targetKcal=parseInt(document.getElementById('target-in').value)||1600;
+  document.getElementById('kcal-target').textContent=targetKcal;
+  setSt('busy','保存中...');
+  try {
+    await gasWrite('config',[['key','value'],['targetKcal',String(targetKcal)]]);
+    setSt('ok','同期済み');
+  } catch(e){log('saveTarget:'+e.message,'err');setSt('err','保存失敗')}
+  renderLog();
+}
+
+function renderLog(){
+  const today=new Date().toISOString().slice(0,10);
+  const tE=foodLog.filter(e=>e.date===today),pE=foodLog.filter(e=>e.date!==today);
+  const tK=tE.reduce((s,e)=>s+(e.kcal||0),0);
+  document.getElementById('kcal-today').textContent=tK;
+  const pct=Math.min(100,Math.round(tK/targetKcal*100));
+  const bar=document.getElementById('kcal-bar');
+  bar.style.width=pct+'%'; bar.className='pgbar'+(tK>targetKcal?' ov':'');
+  document.getElementById('log-today').innerHTML=!tE.length?'<div class="empty"><div class="e">🍽</div>まだ記録なし</div>':tE.map(e=>`<div class="li"><div><div class="li-name">${e.food}</div><div class="li-sub" style="color:var(--ora)">${e.kcal} kcal${e.note?' · '+e.note:''}</div></div></div>`).join('');
+  if(!pE.length){document.getElementById('log-past').innerHTML='<div class="empty"><div class="e">📅</div>記録がありません</div>';return}
+  const gr={};
+  pE.forEach(e=>{if(!gr[e.date]) gr[e.date]=[];gr[e.date].push(e)});
+  document.getElementById('log-past').innerHTML=Object.entries(gr).slice(0,5).map(([date,es])=>{
+    const total=es.reduce((s,e)=>s+(e.kcal||0),0);
+    return `<div style="margin-bottom:12px"><div class="li-sub">${date} → 合計 ${total} kcal</div>${es.map(e=>`<div class="li" style="padding:6px 0"><div class="li-name" style="font-size:13px">${e.food}</div><div class="li-sub" style="color:var(--ora)">${e.kcal} kcal</div></div>`).join('')}</div>`;
+  }).join('');
+}
+
+// ===== Weight =====
+async function addWeight(){
+  const val=parseFloat(document.getElementById('wt-val').value);
+  if(isNaN(val)||val<20||val>300) return toast('正しい体重を入力してください');
+  const today=new Date().toISOString().slice(0,10);
+  setSt('busy','保存中...');
+  try {
+    weightLog=weightLog.filter(w=>w.date!==today);
+    weightLog.push({date:today,kg:val});
+    weightLog.sort((a,b)=>a.date.localeCompare(b.date));
+    await gasWrite('weight',[['date','kg'],...weightLog.map(w=>[w.date,String(w.kg)])]);
+    document.getElementById('wt-val').value='';
+    renderWeight(); setSt('ok','同期済み'); toast(`${val}kgを記録しました`);
+  } catch(e){log('addWeight:'+e.message,'err');setSt('err','保存失敗');toast('保存に失敗しました')}
+}
+
+function renderWeight(){
+  const hist=document.getElementById('w-hist');
+  if(!weightLog.length){
+    ['w-now','w-diff','w-min'].forEach(id=>document.getElementById(id).textContent='--');
+    hist.innerHTML='<div class="empty"><div class="e">📋</div>記録がありません</div>';
+    drawChart([]); return;
+  }
+  const latest=weightLog[weightLog.length-1];
+  const minV=Math.min(...weightLog.map(w=>w.kg));
+  document.getElementById('w-now').textContent=latest.kg;
+  document.getElementById('w-min').textContent=minV;
+  if(weightLog.length>=2){
+    const wa=new Date(); wa.setDate(wa.getDate()-7);
+    const prev=[...weightLog].reverse().find(w=>w.date<=wa.toISOString().slice(0,10));
+    if(prev){
+      const diff=(latest.kg-prev.kg).toFixed(1);
+      const el=document.getElementById('w-diff');
+      el.textContent=(parseFloat(diff)>0?'+':'')+diff;
+      el.style.color=parseFloat(diff)<=0?'var(--tel)':'var(--red)';
+    }
+  }
+  hist.innerHTML=[...weightLog].reverse().slice(0,10).map(w=>`<div class="li"><div class="li-sub">${w.date}</div><div class="li-val" style="color:var(--tel)">${w.kg} kg</div></div>`).join('');
+  drawChart(weightLog.slice(-14));
+}
+
+function drawChart(data){
+  const cv=document.getElementById('w-chart'),em=document.getElementById('w-empty');
+  if(!data.length){cv.style.display='none';em.style.display='';return}
+  cv.style.display='';em.style.display='none';
+  const ctx=cv.getContext('2d'),dpr=window.devicePixelRatio||1;
+  const W=cv.parentElement.clientWidth-28,H=130;
+  cv.width=W*dpr;cv.height=H*dpr;cv.style.width=W+'px';cv.style.height=H+'px';
+  ctx.scale(dpr,dpr);
+  const vals=data.map(d=>d.kg),mn=Math.min(...vals)-.5,mx=Math.max(...vals)+.5;
+  const p={l:34,r:8,t:10,b:22},gW=W-p.l-p.r,gH=H-p.t-p.b;
+  const tx=i=>p.l+(i/(data.length-1||1))*gW,ty=v=>p.t+gH-((v-mn)/(mx-mn))*gH;
+  ctx.fillStyle='#1a1a1a';ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle='#2a2a2a';ctx.lineWidth=1;
+  for(let i=0;i<=4;i++){
+    const y=p.t+(gH/4)*i;
+    ctx.beginPath();ctx.moveTo(p.l,y);ctx.lineTo(W-p.r,y);ctx.stroke();
+    ctx.fillStyle='#666';ctx.font='10px DM Mono,monospace';ctx.textAlign='right';
+    ctx.fillText((mx-(mx-mn)*i/4).toFixed(1),p.l-3,y+4);
+  }
+  if(data.length>1){
+    const gr=ctx.createLinearGradient(0,p.t,0,p.t+gH);
+    gr.addColorStop(0,'rgba(90,245,200,.25)');gr.addColorStop(1,'rgba(90,245,200,0)');
+    ctx.beginPath();ctx.moveTo(tx(0),ty(vals[0]));
+    data.forEach((_,i)=>{if(i) ctx.lineTo(tx(i),ty(vals[i]))});
+    ctx.lineTo(tx(data.length-1),H-p.b);ctx.lineTo(tx(0),H-p.b);ctx.closePath();
+    ctx.fillStyle=gr;ctx.fill();
+    ctx.beginPath();ctx.strokeStyle='#5af5c8';ctx.lineWidth=2;ctx.lineJoin='round';
+    data.forEach((_,i)=>{i?ctx.lineTo(tx(i),ty(vals[i])):ctx.moveTo(tx(0),ty(vals[0]))});
+    ctx.stroke();
+  }
+  data.forEach((_,i)=>{ctx.beginPath();ctx.arc(tx(i),ty(vals[i]),3.5,0,Math.PI*2);ctx.fillStyle='#5af5c8';ctx.fill()});
+  ctx.fillStyle='#666';ctx.font='10px DM Mono,monospace';ctx.textAlign='center';
+  const step=Math.ceil(data.length/4);
+  data.forEach((d,i)=>{if(i%step===0||i===data.length-1) ctx.fillText(d.date.slice(5),tx(i),H-5)});
+}
+
+// 起動時にAPIキーチェック
+if(!localStorage.getItem('claude_api_key')){
+  showKeyModal();
+} else {
+  init();
+}
+</script>
+</body>
+</html>
