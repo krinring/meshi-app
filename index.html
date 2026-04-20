@@ -628,12 +628,20 @@ async function genRecipe(){
   const btn=document.getElementById('btn-rec'),box=document.getElementById('rec-box');
   const res=document.getElementById('rec-result'),ph=document.getElementById('rec-placeholder');
   btn.disabled=true;res.style.display='none';ph.style.display='block';ph.className='aibox dim';ph.textContent='生成中...';
-  const list=ingredients.filter(i=>!i.frozen).map(i=>`${i.name}（${i.qty}${i.expiry?`・期限${i.expiry}`:''}）`).join('、');
+  const ingList=ingredients.filter(i=>!i.frozen);
+  const unitMap=Object.fromEntries(ingList.map(i=>{const m=i.qty.match(/[\d.]+\s*(.+)/);return[i.name,m?m[1].trim():i.qty]}));
+  const list=ingList.map(i=>`${i.name}（在庫${i.qty}・単位:${unitMap[i.name]}${i.expiry?`・期限${i.expiry}`:''}）`).join('\n');
   const frozen=ingredients.filter(i=>i.frozen).map(i=>i.name).join('、');
+  const unitRules=ingList.map(i=>`${i.name} → 必ず「${unitMap[i.name]}」単位で記載`).join('\n');
   try{
     const text=await askClaude(
 `あなたは料理が完全に初めての人向けのアシスタントです。
-冷蔵庫：${list}${frozen?`\n冷凍庫：${frozen}`:''}
+冷蔵庫の食材（在庫量と単位）：
+${list}${frozen?`\n冷凍庫：${frozen}`:''}
+
+【単位ルール（絶対厳守）】
+${unitRules}
+上記単位以外への換算・言い換え（例: g→個、ml→カップ）は一切禁止。
 
 今日の夕食1品を提案してください。期限が近い食材を優先。${req?`リクエスト：${req}`:'ダイエット中（500〜700kcal目安）。'}
 
@@ -641,7 +649,7 @@ async function genRecipe(){
 
 【今日の夕食】
 料理名：
-使う食材と分量：（1人分の具体的なグラム数・個数まで記載）
+使う食材と分量：（各食材の分量は上記単位ルール通りの単位で記載）
 手順：（包丁の持ち方・切り方の名前と動き・火力の目安・焼き色の見極め方・目安時間など、料理が初めての人でも1ステップずつ確実にできるよう丁寧に記載すること）
 推定カロリー：（数値のみ、例: 520kcal）
 
@@ -652,8 +660,9 @@ async function genRecipe(){
 （あれば記載、なければ「特になし」）
 
 ---DEDUCT---
-[{"name":"食材名","qty":"使う量"}]
+[{"name":"食材名","qty":"使う量（単位ルール通りの単位で数値+単位、例:150g）"}]
 ※塩・砂糖・醤油・みりん・酒・油・バター・小麦粉・片栗粉等の調味料は含めないこと
+※qtyは必ず在庫と同じ単位（上記単位ルール）を使うこと
 
 ---MEAL---
 {"name":"料理名","kcal":推定カロリーの数値}`);
