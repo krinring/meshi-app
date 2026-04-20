@@ -88,6 +88,8 @@ select option{background:var(--sur2)}textarea{resize:none}
 .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 @media(min-width:900px){.toast{bottom:20px}}
 canvas{display:block;width:100%!important;border-radius:6px}
+.ex-chip{background:var(--sur2);border:1px solid var(--bdr);border-radius:8px;padding:7px 12px;font-size:12px;cursor:pointer;color:var(--muted);transition:all .15s}
+.ex-chip:hover{border-color:var(--tel);color:var(--tel)}
 #dbg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.96);z-index:9999;flex-direction:column;padding:16px;gap:10px}
 #dbg.on{display:flex}
 #dbg-log{flex:1;overflow-y:auto;font-family:'DM Mono',monospace;font-size:11px;line-height:1.9;color:#ccc;white-space:pre-wrap;background:var(--sur2);border:1px solid var(--bdr);border-radius:8px;padding:10px}
@@ -233,6 +235,7 @@ canvas{display:block;width:100%!important;border-radius:6px}
       <button class="dtab on" onclick="tab('rec',this)">🍳 レシピ</button>
       <button class="dtab" onclick="tab('log',this)">📝 ログ</button>
       <button class="dtab" onclick="tab('wt',this)">⚖️ 体重</button>
+      <button class="dtab" onclick="tab('ex',this)">🏃 運動</button>
     </div>
 
     <!-- レシピ -->
@@ -330,6 +333,33 @@ canvas{display:block;width:100%!important;border-radius:6px}
       <div class="sec" style="margin-top:10px">履歴</div>
       <div class="card"><div id="w-hist"><div class="empty"><div class="e">📋</div>記録がありません</div></div></div>
     </div>
+
+    <!-- 運動 -->
+    <div class="pnl" id="pnl-ex">
+      <div class="card">
+        <div class="sec">今日のAI運動提案</div>
+        <button class="btn btn-t" id="btn-ex-ai" onclick="genExercise()" style="width:100%;margin-bottom:10px">🤖 今日の運動を提案</button>
+        <div id="ex-ai" class="aibox dim" style="display:none"></div>
+      </div>
+      <div class="card">
+        <div class="sec">運動を記録</div>
+        <div class="chips" id="ex-chips">
+          <button class="ex-chip" onclick="fillEx('ウォーキング',30)">🚶 ウォーキング30分</button>
+          <button class="ex-chip" onclick="fillEx('ジョギング',20)">🏃 ジョギング20分</button>
+          <button class="ex-chip" onclick="fillEx('筋トレ',20)">💪 筋トレ20分</button>
+          <button class="ex-chip" onclick="fillEx('ストレッチ',10)">🧘 ストレッチ10分</button>
+          <button class="ex-chip" onclick="fillEx('サイクリング',30)">🚲 サイクリング30分</button>
+        </div>
+        <div class="fg"><label class="lbl">運動の種類</label><input id="ex-name" placeholder="例：ウォーキング"></div>
+        <div class="row" style="gap:8px;margin-bottom:10px">
+          <div style="flex:1"><label class="lbl">時間（分）</label><input id="ex-min" type="number" placeholder="30"></div>
+          <div style="flex:1"><label class="lbl">消費kcal（任意）</label><input id="ex-kcal" type="number" placeholder="自動推定"></div>
+        </div>
+        <button class="btn btn-g" onclick="logExercise()">✅ 記録する</button>
+      </div>
+      <div class="sec" style="margin-top:4px">最近の運動ログ</div>
+      <div class="card"><div id="ex-hist"><div class="empty"><div class="e">🏅</div>記録がありません</div></div></div>
+    </div>
   </div>
 </div>
 
@@ -338,6 +368,7 @@ canvas{display:block;width:100%!important;border-radius:6px}
   <button class="tbtn" onclick="tab('rec',this)"><span class="ic">🍳</span>レシピ</button>
   <button class="tbtn" onclick="tab('log',this)"><span class="ic">📝</span>ログ</button>
   <button class="tbtn" onclick="tab('wt',this)"><span class="ic">⚖️</span>体重</button>
+  <button class="tbtn" onclick="tab('ex',this)"><span class="ic">🏃</span>運動</button>
 </div>
 <div class="toast" id="toast"></div>
 
@@ -345,7 +376,7 @@ canvas{display:block;width:100%!important;border-radius:6px}
 const GAS='https://script.google.com/macros/s/AKfycbz-VJzYmfwAl3IQyFp9ROZ59LYJBjPia8x8fGvLDH_1Tzrd7DD0OUE1C3gygwzdGsM8/exec';
 const CLAUDE_API='https://api.anthropic.com/v1/messages';
 
-let ingredients=[],foodLog=[],weightLog=[],targetKcal=1600,shopItems=[];
+let ingredients=[],foodLog=[],weightLog=[],exerciseLog=[],targetKcal=1600,shopItems=[];
 let lastRecipeDeduct=[],lastRecipeMeal=null,selectedMeal='朝';
 let cbCtr=0,dbgLines=[],useFetch=true;
 
@@ -444,26 +475,29 @@ async function gasRead(sheet){const r=await gasCall({action:'read',sheet});if(!r
 async function gasWrite(sheet,rows){const r=await gasCall({action:'write',sheet,rows:JSON.stringify(rows)});if(!r.ok)throw new Error(r.error||'write failed');log(`write OK: ${sheet}`,'ok')}
 async function gasAppend(sheet,rows){const r=await gasCall({action:'append',sheet,rows:JSON.stringify(rows)});if(!r.ok)throw new Error(r.error||'append failed');log(`append OK: ${sheet}`,'ok')}
 function parseRows(rows){if(!rows||!rows.length)return[];const f=rows[0];const isH=f.length>0&&typeof f[0]==='string'&&isNaN(f[0])&&f[0]!=='';return isH?rows.slice(1):rows}
+function normDate(s){s=String(s||'');if(!s)return'';if(s.includes('T')){const d=new Date(s);if(!isNaN(d))return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}return s.slice(0,10);}
 
 // ===== Init =====
 async function init(){
   useFetch=true;setSt('busy','接続中...');log('=== init ===');
   try{
-    const[iD,lD,wD,cD]=await Promise.all([gasRead('food'),gasRead('foodlog'),gasRead('weight'),gasRead('config')]);
-    ingredients=parseRows(iD).map(r=>({id:String(r[0]),name:String(r[1]||''),qty:String(r[2]||'適量'),expiry:String(r[3]||'').slice(0,10),frozen:r[4]==='1'})).filter(r=>r.name);
-    foodLog=parseRows(lD).map(r=>({id:String(r[0]),date:String(r[1]||'').slice(0,10),food:String(r[2]||''),kcal:parseInt(r[3])||0,note:String(r[4]||''),mealtype:String(r[5]||'夜')})).filter(r=>r.food);
-    weightLog=parseRows(wD).map(r=>({date:String(r[0]||'').slice(0,10),kg:parseFloat(r[1])})).filter(r=>r.date&&!isNaN(r.kg));
+    const[iD,lD,wD,cD,eD]=await Promise.all([gasRead('food'),gasRead('foodlog'),gasRead('weight'),gasRead('config'),gasRead('exercise')]);
+    ingredients=parseRows(iD).map(r=>({id:String(r[0]),name:String(r[1]||''),qty:String(r[2]||'適量'),expiry:normDate(r[3]),frozen:r[4]==='1'})).filter(r=>r.name);
+    foodLog=parseRows(lD).map(r=>({id:String(r[0]),date:normDate(r[1]),food:String(r[2]||''),kcal:parseInt(r[3])||0,note:String(r[4]||''),mealtype:String(r[5]||'夜')})).filter(r=>r.food);
+    weightLog=parseRows(wD).map(r=>({date:normDate(r[0]),kg:parseFloat(r[1])})).filter(r=>r.date&&!isNaN(r.kg));
     weightLog.sort((a,b)=>a.date.localeCompare(b.date));
+    exerciseLog=parseRows(eD).map(r=>({id:String(r[0]),date:normDate(r[1]),activity:String(r[2]||''),min:parseInt(r[3])||0,kcal:parseInt(r[4])||0})).filter(r=>r.activity);
+    exerciseLog.sort((a,b)=>b.date.localeCompare(a.date));
     const cfg=Object.fromEntries(parseRows(cD).map(r=>[String(r[0]),String(r[1]||'')]));
     targetKcal=parseInt(cfg.targetKcal)||1600;
     document.getElementById('target-in').value=targetKcal;
     document.getElementById('kcal-target').textContent=targetKcal;
-    log(`食材:${ingredients.length} ログ:${foodLog.length} 体重:${weightLog.length}`,'ok');
+    log(`食材:${ingredients.length} ログ:${foodLog.length} 体重:${weightLog.length} 運動:${exerciseLog.length}`,'ok');
     renderAll();setSt('ok','同期済み');
   }catch(e){log('init ERROR: '+e.message,'err');setSt('err','失敗（タップで詳細）');toast('接続失敗 → ステータスタップで確認')}
 }
 function setSt(s,t){document.getElementById('dot').className='dot '+s;document.getElementById('sync-txt').textContent=t}
-function renderAll(){renderIng();renderLog();renderWeight();renderQuickAdd()}
+function renderAll(){renderIng();renderLog();renderWeight();renderExercise();renderQuickAdd()}
 
 // ===== Desktop init =====
 function initDesktop(){
@@ -477,7 +511,7 @@ function initDesktop(){
 function tab(name,btn){
   const isD=window.innerWidth>=900;
   if(isD){
-    ['pnl-rec','pnl-log','pnl-wt'].forEach(id=>document.getElementById(id).classList.remove('on'));
+    ['pnl-rec','pnl-log','pnl-wt','pnl-ex'].forEach(id=>document.getElementById(id).classList.remove('on'));
     document.querySelectorAll('.dtab').forEach(b=>b.classList.remove('on'));
     if(name!=='ing'){document.getElementById('pnl-'+name).classList.add('on');if(btn)btn.classList.add('on')}
   }else{
@@ -828,6 +862,64 @@ function renderWeight(){
   hist.innerHTML=[...weightLog].reverse().slice(0,10).map(w=>`<div class="li"><div class="li-sub">${w.date}</div><div class="li-val" style="color:var(--tel)">${w.kg} kg</div></div>`).join('');
   drawChart(weightLog.slice(-14));
 }
+// ===== Exercise =====
+function fillEx(name,min){document.getElementById('ex-name').value=name;document.getElementById('ex-min').value=min}
+function renderExercise(){
+  const today=todayStr();
+  const hist=document.getElementById('ex-hist');
+  if(!exerciseLog.length){hist.innerHTML='<div class="empty"><div class="e">🏅</div>記録がありません</div>';return}
+  const shown=exerciseLog.slice(0,14);
+  const gr={};shown.forEach(e=>{if(!gr[e.date])gr[e.date]=[];gr[e.date].push(e)});
+  hist.innerHTML=Object.entries(gr).sort((a,b)=>b[0].localeCompare(a[0])).map(([date,es])=>{
+    const label=date===today?'今日':date;
+    const totalK=es.reduce((s,e)=>s+e.kcal,0);
+    return`<div style="margin-bottom:10px"><div class="li-sub">${label}${totalK?' → 合計 -'+totalK+'kcal':''}</div>${es.map(e=>`<div class="li" style="padding:6px 0"><div class="li-name" style="font-size:13px">${e.activity}</div><div class="li-sub" style="color:var(--tel)">${e.min}分${e.kcal?' · -'+e.kcal+'kcal':''}</div></div>`).join('')}</div>`;
+  }).join('');
+}
+async function genExercise(){
+  const btn=document.getElementById('btn-ex-ai'),ai=document.getElementById('ex-ai');
+  btn.disabled=true;ai.style.display='block';ai.className='aibox dim';ai.textContent='考え中...';
+  const today=todayStr();
+  const todayKcal=foodLog.filter(e=>e.date===today).reduce((s,e)=>s+e.kcal,0);
+  const recentEx=exerciseLog.slice(0,7).map(e=>`${e.date} ${e.activity} ${e.min}分`).join('、')||'なし';
+  const latestWt=weightLog.length?weightLog[weightLog.length-1].kg:null;
+  try{
+    const text=await askClaude(`ダイエット中の人へ今日の運動を提案してください。
+カロリー目標：${targetKcal}kcal
+今日の摂取カロリー：${todayKcal}kcal
+最近の運動：${recentEx}
+${latestWt?`現在の体重：${latestWt}kg`:''}
+
+・今日やるべき運動を2〜3つ具体的に（種類・時間・消費kcal目安）
+・無理なく続けられる内容で
+・今日の摂取カロリーを踏まえたアドバイスも一言
+200字程度でまとめてください。`,500);
+    ai.className='aibox';ai.textContent=text;
+  }catch(e){ai.className='aibox';ai.textContent='エラー: '+e.message;log('genExercise:'+e.message,'err')}
+  btn.disabled=false;
+}
+async function logExercise(){
+  const name=document.getElementById('ex-name').value.trim();
+  const min=parseInt(document.getElementById('ex-min').value)||0;
+  let kcal=parseInt(document.getElementById('ex-kcal').value)||0;
+  if(!name)return toast('運動の種類を入力してください');
+  if(!kcal&&min){
+    const mets={ウォーキング:3.5,ジョギング:7,筋トレ:5,ストレッチ:2.5,サイクリング:6};
+    const met=Object.entries(mets).find(([k])=>name.includes(k));
+    const wt=weightLog.length?weightLog[weightLog.length-1].kg:60;
+    if(met)kcal=Math.round(met[1]*wt*min/60);
+  }
+  const entry={id:Date.now().toString(),date:todayStr(),activity:name,min,kcal};
+  setSt('busy','保存中...');
+  try{
+    if(!exerciseLog.length){await gasWrite('exercise',[['id','date','activity','min','kcal'],[entry.id,entry.date,entry.activity,entry.min,entry.kcal]])}
+    else{await gasAppend('exercise',[[entry.id,entry.date,entry.activity,entry.min,entry.kcal]])}
+    exerciseLog.unshift(entry);
+    document.getElementById('ex-name').value='';document.getElementById('ex-min').value='';document.getElementById('ex-kcal').value='';
+    renderExercise();setSt('ok','同期済み');toast(`${name} ${min}分を記録しました${kcal?' (-'+kcal+'kcal)':''}`);
+  }catch(e){log('logExercise:'+e.message,'err');setSt('err','保存失敗')}
+}
+
 function drawChart(data){
   const cv=document.getElementById('w-chart'),em=document.getElementById('w-empty');
   if(!data.length){cv.style.display='none';em.style.display='';return}
