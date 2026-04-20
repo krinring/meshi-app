@@ -607,6 +607,12 @@ function expSt(ex,frozen){
   const d=Math.floor((exDate-now)/86400000);
   return d<0?'exp':d<=2?'soon':'ok';
 }
+function daysLeft(ex){
+  if(!ex)return null;
+  const [ey,em,ed]=ex.slice(0,10).split('-').map(Number);
+  const now=new Date();now.setHours(0,0,0,0);
+  return Math.floor((new Date(ey,em-1,ed)-now)/86400000);
+}
 function renderIng(){
   const el=document.getElementById('ing-list');let soon=0,exp=0;
   if(!ingredients.length){el.innerHTML='<div class="empty"><div class="e">🥬</div>食材を登録してください</div>';}
@@ -636,6 +642,8 @@ async function genRecipe(){
   const list=ingList.map(i=>`${i.name}（在庫${i.qty}・単位:${unitMap[i.name]}${i.expiry?`・期限${i.expiry}`:''}）`).join('\n');
   const frozen=ingredients.filter(i=>i.frozen).map(i=>i.name).join('、');
   const unitRules=ingList.map(i=>`${i.name} → 必ず「${unitMap[i.name]}」単位で記載`).join('\n');
+  const freezeCandidates=ingList.filter(i=>{const d=daysLeft(i.expiry);return d!==null&&d<=3;}).map(i=>{const d=daysLeft(i.expiry);const label=d<0?`期限切れ（${Math.abs(d)}日超過）`:d===0?'今日が期限':`あと${d}日`;return`${i.name}（${label}・在庫${i.qty}）`;});
+  const freezeSection=freezeCandidates.length?`【冷凍おすすめ ― 期限3日以内の要注意食材】\n${freezeCandidates.join('\n')}\n→ 今日のレシピで使わない分は何gずつ小分けにして冷凍するか具体的に案内すること。`:`【冷凍おすすめ】\n特になし（期限3日以内の食材なし）`;
   try{
     const text=await askClaude(
 `あなたは料理が完全に初めての人向けのアシスタントです。
@@ -656,8 +664,7 @@ ${unitRules}
 手順：（包丁の持ち方・切り方の名前と動き・火力の目安・焼き色の見極め方・目安時間など、料理が初めての人でも1ステップずつ確実にできるよう丁寧に記載すること）
 推定カロリー：（数値のみ、例: 520kcal）
 
-【冷凍おすすめ】
-（在庫の中で冷凍保存すべき食材があれば「〇〇：△△ずつ小分け冷凍」形式で記載、なければ「特になし」）
+${freezeSection}
 
 【明日の下準備】
 （あれば記載、なければ「特になし」）
