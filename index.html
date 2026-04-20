@@ -446,7 +446,7 @@ async function init(){
     const[iD,lD,wD,cD]=await Promise.all([gasRead('food'),gasRead('foodlog'),gasRead('weight'),gasRead('config')]);
     ingredients=parseRows(iD).map(r=>({id:String(r[0]),name:String(r[1]||''),qty:String(r[2]||'適量'),expiry:String(r[3]||''),frozen:r[4]==='1'})).filter(r=>r.name);
     foodLog=parseRows(lD).map(r=>({id:String(r[0]),date:String(r[1]||''),food:String(r[2]||''),kcal:parseInt(r[3])||0,note:String(r[4]||''),mealtype:String(r[5]||'夜')})).filter(r=>r.food);
-    weightLog=parseRows(wD).map(r=>({date:String(r[0]),kg:parseFloat(r[1])})).filter(r=>r.date&&!isNaN(r.kg));
+    weightLog=parseRows(wD).map(r=>({date:String(r[0]||'').slice(0,10),kg:parseFloat(r[1])})).filter(r=>r.date&&!isNaN(r.kg));
     weightLog.sort((a,b)=>a.date.localeCompare(b.date));
     const cfg=Object.fromEntries(parseRows(cD).map(r=>[String(r[0]),String(r[1]||'')]));
     targetKcal=parseInt(cfg.targetKcal)||1600;
@@ -796,7 +796,7 @@ function drawChart(data){
   ctx.scale(dpr,dpr);
   const vals=data.map(d=>d.kg),mn=Math.min(...vals)-.5,mx=Math.max(...vals)+.5;
   const p={l:34,r:8,t:10,b:22},gW=W-p.l-p.r,gH=H-p.t-p.b;
-  const tx=i=>p.l+(i/(data.length-1||1))*gW,ty=v=>p.t+gH-((v-mn)/(mx-mn))*gH;
+  const tx=data.length===1?(()=>p.l+gW/2):(i=>p.l+(i/(data.length-1))*gW),ty=v=>p.t+gH-((v-mn)/(mx-mn))*gH;
   ctx.fillStyle='#1a1a1a';ctx.fillRect(0,0,W,H);
   ctx.strokeStyle='#2a2a2a';ctx.lineWidth=1;
   for(let i=0;i<=4;i++){
@@ -818,7 +818,7 @@ function drawChart(data){
   data.forEach((_,i)=>{ctx.beginPath();ctx.arc(tx(i),ty(vals[i]),3.5,0,Math.PI*2);ctx.fillStyle='#5af5c8';ctx.fill()});
   ctx.fillStyle='#666';ctx.font='10px DM Mono,monospace';ctx.textAlign='center';
   const step=Math.ceil(data.length/4);
-  data.forEach((d,i)=>{if(i%step===0||i===data.length-1)ctx.fillText(d.date.slice(5),tx(i),H-5)});
+  data.forEach((d,i)=>{if(i%step===0||i===data.length-1)ctx.fillText(d.date.slice(5,10),tx(i),H-5)});
 }
 
 // ===== Start =====
