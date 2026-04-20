@@ -344,16 +344,19 @@ canvas{display:block;width:100%!important;border-radius:6px}
       <div class="card">
         <div class="sec">運動を記録</div>
         <div class="chips" id="ex-chips">
-          <button class="ex-chip" onclick="fillEx('ウォーキング',30)">🚶 ウォーキング30分</button>
-          <button class="ex-chip" onclick="fillEx('ジョギング',20)">🏃 ジョギング20分</button>
-          <button class="ex-chip" onclick="fillEx('筋トレ',20)">💪 筋トレ20分</button>
-          <button class="ex-chip" onclick="fillEx('ストレッチ',10)">🧘 ストレッチ10分</button>
-          <button class="ex-chip" onclick="fillEx('サイクリング',30)">🚲 サイクリング30分</button>
+          <button class="ex-chip" onclick="fillEx('ウォーキング',30,'分')">🚶 ウォーキング</button>
+          <button class="ex-chip" onclick="fillEx('ジョギング',20,'分')">🏃 ジョギング</button>
+          <button class="ex-chip" onclick="fillEx('筋トレ',20,'分')">💪 筋トレ</button>
+          <button class="ex-chip" onclick="fillEx('腕立て伏せ',20,'回')">🤸 腕立て伏せ</button>
+          <button class="ex-chip" onclick="fillEx('階段',100,'段')">🪜 階段</button>
+          <button class="ex-chip" onclick="fillEx('ストレッチ',10,'分')">🧘 ストレッチ</button>
+          <button class="ex-chip" onclick="fillEx('サイクリング',30,'分')">🚲 サイクリング</button>
         </div>
-        <div class="fg"><label class="lbl">運動の種類</label><input id="ex-name" placeholder="例：ウォーキング"></div>
+        <div class="fg"><label class="lbl">運動の種類</label><input id="ex-name" placeholder="例：腕立て伏せ"></div>
         <div class="row" style="gap:8px;margin-bottom:10px">
-          <div style="flex:1"><label class="lbl">時間（分）</label><input id="ex-min" type="number" placeholder="30"></div>
-          <div style="flex:1"><label class="lbl">消費kcal（任意）</label><input id="ex-kcal" type="number" placeholder="自動推定"></div>
+          <div style="flex:2"><label class="lbl">量</label><input id="ex-amount" type="number" placeholder="30"></div>
+          <div style="flex:1"><label class="lbl">単位</label><input id="ex-unit" placeholder="分" style="text-align:center"></div>
+          <div style="flex:2"><label class="lbl">消費kcal（任意）</label><input id="ex-kcal" type="number" placeholder="自動推定"></div>
         </div>
         <button class="btn btn-g" onclick="logExercise()">✅ 記録する</button>
       </div>
@@ -486,7 +489,7 @@ async function init(){
     foodLog=parseRows(lD).map(r=>({id:String(r[0]),date:normDate(r[1]),food:String(r[2]||''),kcal:parseInt(r[3])||0,note:String(r[4]||''),mealtype:String(r[5]||'夜')})).filter(r=>r.food);
     weightLog=parseRows(wD).map(r=>({date:normDate(r[0]),kg:parseFloat(r[1])})).filter(r=>r.date&&!isNaN(r.kg));
     weightLog.sort((a,b)=>a.date.localeCompare(b.date));
-    exerciseLog=parseRows(eD).map(r=>({id:String(r[0]),date:normDate(r[1]),activity:String(r[2]||''),min:parseInt(r[3])||0,kcal:parseInt(r[4])||0})).filter(r=>r.activity);
+    exerciseLog=parseRows(eD).map(r=>({id:String(r[0]),date:normDate(r[1]),activity:String(r[2]||''),qty:String(r[3]||''),kcal:parseInt(r[4])||0})).filter(r=>r.activity);
     exerciseLog.sort((a,b)=>b.date.localeCompare(a.date));
     const cfg=Object.fromEntries(parseRows(cD).map(r=>[String(r[0]),String(r[1]||'')]));
     targetKcal=parseInt(cfg.targetKcal)||1600;
@@ -872,7 +875,7 @@ function renderWeight(){
   drawChart(weightLog.slice(-14));
 }
 // ===== Exercise =====
-function fillEx(name,min){document.getElementById('ex-name').value=name;document.getElementById('ex-min').value=min}
+function fillEx(name,amount,unit='分'){document.getElementById('ex-name').value=name;document.getElementById('ex-amount').value=amount;document.getElementById('ex-unit').value=unit}
 function renderExercise(){
   const today=todayStr();
   const hist=document.getElementById('ex-hist');
@@ -882,7 +885,7 @@ function renderExercise(){
   hist.innerHTML=Object.entries(gr).sort((a,b)=>b[0].localeCompare(a[0])).map(([date,es])=>{
     const label=date===today?'今日':date;
     const totalK=es.reduce((s,e)=>s+e.kcal,0);
-    return`<div style="margin-bottom:10px"><div class="li-sub">${label}${totalK?' → 合計 -'+totalK+'kcal':''}</div>${es.map(e=>`<div class="li" style="padding:6px 0"><div class="li-name" style="font-size:13px">${e.activity}</div><div class="li-sub" style="color:var(--tel)">${e.min}分${e.kcal?' · -'+e.kcal+'kcal':''}</div></div>`).join('')}</div>`;
+    return`<div style="margin-bottom:10px"><div class="li-sub">${label}${totalK?' → 合計 -'+totalK+'kcal':''}</div>${es.map(e=>`<div class="li" style="padding:6px 0"><div class="li-name" style="font-size:13px">${e.activity}</div><div class="li-sub" style="color:var(--tel)">${e.qty}${e.kcal?' · -'+e.kcal+'kcal':''}</div></div>`).join('')}</div>`;
   }).join('');
 }
 async function genExercise(){
@@ -890,7 +893,7 @@ async function genExercise(){
   btn.disabled=true;ai.style.display='block';ai.className='aibox dim';ai.textContent='考え中...';
   const today=todayStr();
   const todayKcal=foodLog.filter(e=>e.date===today).reduce((s,e)=>s+e.kcal,0);
-  const recentEx=exerciseLog.slice(0,7).map(e=>`${e.date} ${e.activity} ${e.min}分`).join('、')||'なし';
+  const recentEx=exerciseLog.slice(0,7).map(e=>`${e.date} ${e.activity} ${e.qty}`).join('、')||'なし';
   const latestWt=weightLog.length?weightLog[weightLog.length-1].kg:null;
   try{
     const text=await askClaude(`ダイエット中の人へ今日の運動を提案してください。
@@ -909,23 +912,25 @@ ${latestWt?`現在の体重：${latestWt}kg`:''}
 }
 async function logExercise(){
   const name=document.getElementById('ex-name').value.trim();
-  const min=parseInt(document.getElementById('ex-min').value)||0;
+  const amount=parseFloat(document.getElementById('ex-amount').value)||0;
+  const unit=(document.getElementById('ex-unit').value.trim()||'分');
+  const qty=amount?(amount+unit):'';
   let kcal=parseInt(document.getElementById('ex-kcal').value)||0;
   if(!name)return toast('運動の種類を入力してください');
-  if(!kcal&&min){
+  if(!kcal&&amount&&unit==='分'){
     const mets={ウォーキング:3.5,ジョギング:7,筋トレ:5,ストレッチ:2.5,サイクリング:6};
     const met=Object.entries(mets).find(([k])=>name.includes(k));
     const wt=weightLog.length?weightLog[weightLog.length-1].kg:60;
-    if(met)kcal=Math.round(met[1]*wt*min/60);
+    if(met)kcal=Math.round(met[1]*wt*amount/60);
   }
-  const entry={id:Date.now().toString(),date:todayStr(),activity:name,min,kcal};
+  const entry={id:Date.now().toString(),date:todayStr(),activity:name,qty,kcal};
   setSt('busy','保存中...');
   try{
-    if(!exerciseLog.length){await gasWrite('exercise',[['id','date','activity','min','kcal'],[entry.id,entry.date,entry.activity,entry.min,entry.kcal]])}
-    else{await gasAppend('exercise',[[entry.id,entry.date,entry.activity,entry.min,entry.kcal]])}
+    if(!exerciseLog.length){await gasWrite('exercise',[['id','date','activity','qty','kcal'],[entry.id,entry.date,entry.activity,entry.qty,entry.kcal]])}
+    else{await gasAppend('exercise',[[entry.id,entry.date,entry.activity,entry.qty,entry.kcal]])}
     exerciseLog.unshift(entry);
-    document.getElementById('ex-name').value='';document.getElementById('ex-min').value='';document.getElementById('ex-kcal').value='';
-    renderExercise();setSt('ok','同期済み');toast(`${name} ${min}分を記録しました${kcal?' (-'+kcal+'kcal)':''}`);
+    document.getElementById('ex-name').value='';document.getElementById('ex-amount').value='';document.getElementById('ex-unit').value='';document.getElementById('ex-kcal').value='';
+    renderExercise();setSt('ok','同期済み');toast(`${name}${qty?' '+qty:''}を記録しました${kcal?' (-'+kcal+'kcal)':''}`);
   }catch(e){log('logExercise:'+e.message,'err');setSt('err','保存失敗')}
 }
 
