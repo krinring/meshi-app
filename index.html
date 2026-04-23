@@ -165,13 +165,34 @@ canvas{display:block;width:100%!important;border-radius:6px}
 <!-- Freeze Suggestion Modal -->
 <div id="freeze-modal" class="modal-ov" style="display:none">
   <div class="modal">
-    <div class="modal-title">❄️ 冷凍の小分け提案</div>
+    <div class="modal-title" id="freeze-modal-title">❄️ 冷凍の小分け提案</div>
     <div id="freeze-modal-sub" class="modal-sub"></div>
     <div id="freeze-modal-body" style="margin-bottom:16px"></div>
-    <div class="row" style="gap:8px">
-      <button class="btn btn-b" style="flex:1" id="freeze-confirm-btn">❄️ この分け方で冷凍する</button>
+    <div class="row" style="gap:8px" id="freeze-modal-btns">
+      <button class="btn btn-b" style="flex:1" id="freeze-confirm-btn" style="display:none">❄️ 冷凍する</button>
       <button class="btn btn-sm" style="flex:1" onclick="document.getElementById('freeze-modal').style.display='none'">キャンセル</button>
     </div>
+  </div>
+</div>
+
+<!-- Thaw Modal -->
+<div id="thaw-modal" class="modal-ov" style="display:none">
+  <div class="modal">
+    <div class="modal-title">🌡️ 解凍方法を選択</div>
+    <div id="thaw-modal-sub" class="modal-sub"></div>
+    <div style="margin-bottom:16px">
+      <div class="card" style="margin-bottom:8px;border-color:var(--tel)">
+        <div style="font-weight:700;font-size:14px;margin-bottom:4px">🌙 冷蔵庫で解凍（推奨）</div>
+        <div class="li-sub">12〜24時間かかります。今夜冷蔵庫に移せば明日使えます。品質が一番保たれます。</div>
+        <button class="btn btn-t" style="width:100%;margin-top:10px" id="thaw-fridge-btn">冷蔵庫に移した（明日使う）</button>
+      </div>
+      <div class="card" style="border-color:var(--ora)">
+        <div style="font-weight:700;font-size:14px;margin-bottom:4px">💧 流水解凍（急ぎの場合）</div>
+        <div class="li-sub">袋ごと流水にあてて15〜30分。今日使えます。</div>
+        <button class="btn btn-o" style="width:100%;margin-top:10px" id="thaw-now-btn">今すぐ解凍（今日使う）</button>
+      </div>
+    </div>
+    <button class="btn btn-sm" style="width:100%" onclick="document.getElementById('thaw-modal').style.display='none'">キャンセル</button>
   </div>
 </div>
 
@@ -609,36 +630,82 @@ async function delIng(id){
 }
 async function freezeIng(id){
   const ing=ingredients.find(i=>i.id===id);if(!ing)return;
-  if(ing.frozen){
-    ing.frozen=false;setSt('busy','更新中...');
-    try{await gasWrite('food',[['id','name','qty','expiry','frozen'],...ingredients.map(i=>[i.id,i.name,i.qty,i.expiry,i.frozen?'1':'0'])]);renderIng();setSt('ok','同期済み');toast('解凍しました');}
-    catch(e){log('freezeIng:'+e.message,'err');setSt('err','更新失敗')}
-    return;
-  }
-  // 冷凍→AI小分け提案
+  if(ing.frozen){showThawModal(ing);return;}
+  // 冷凍→AI判定・小分けオプション提案
   const modal=document.getElementById('freeze-modal');
+  const title=document.getElementById('freeze-modal-title');
   const sub=document.getElementById('freeze-modal-sub');
   const body=document.getElementById('freeze-modal-body');
-  const btn=document.getElementById('freeze-confirm-btn');
-  sub.textContent=`${ing.name}（${ing.qty}）の小分け方法を考えています...`;
-  body.innerHTML='<div style="color:var(--muted);font-size:13px">AIが提案を生成中...</div>';
+  const confirmBtn=document.getElementById('freeze-confirm-btn');
+  title.textContent='❄️ 冷凍の小分け提案';
+  sub.textContent=`${ing.name}（${ing.qty}）を確認中...`;
+  body.innerHTML='<div style="color:var(--muted);font-size:13px">AIが確認中...</div>';
+  confirmBtn.style.display='none';confirmBtn.onclick=null;
   modal.style.display='flex';
-  btn.onclick=null;
   try{
-    const text=await askClaude(`食材「${ing.name}」（${ing.qty}）を冷凍保存する。初心者向けに最適な小分け方法を提案してください。\nJSONのみ、前置き不要。\n{"portions":[{"qty":"1回分の量","memo":"用途メモ"}],"tip":"保存のコツ1行"}`,300);
+    const text=await askClaude(
+`食材「${ing.name}」（${ing.qty}）について以下をJSONのみで回答。前置き不要。
+{"freezable":true/false,"warning":"冷凍不可の場合の理由（可能な場合はnull）","options":[{"label":"分け方の説明（例：2等分 150gずつ）","portions":[{"qty":"量","memo":"用途"}]},{"label":"別の分け方","portions":[...]}],"tip":"保存のコツ1行","months":保存可能月数}
+optionsは2〜3パターン提案。冷凍に向かない食材（豆腐・生野菜サラダ等）はfreezable:false。`,400);
     const json=JSON.parse(text.replace(/```json|```/g,'').trim());
-    sub.textContent=`${ing.name}（${ing.qty}）の小分け提案`;
-    body.innerHTML=`<div style="margin-bottom:10px">${json.portions.map(p=>`<div class="ded-item"><span>${p.qty}</span><span style="color:var(--muted);font-size:12px;font-family:'DM Mono',monospace">${p.memo||''}</span></div>`).join('')}</div><div class="li-sub" style="color:var(--tel)">${json.tip||''}</div>`;
-    btn.onclick=async()=>{
-      modal.style.display='none';
-      // 在庫を portions に分割して冷凍扱いで登録
-      const newItems=json.portions.map((p,idx)=>({id:`${ing.id}_f${idx}`,name:ing.name,qty:p.qty,expiry:ing.expiry,frozen:true}));
-      ingredients=ingredients.filter(i=>i.id!==ing.id).concat(newItems);
-      setSt('busy','更新中...');
-      try{await gasWrite('food',[['id','name','qty','expiry','frozen'],...ingredients.map(i=>[i.id,i.name,i.qty,i.expiry,i.frozen?'1':'0'])]);renderIng();setSt('ok','同期済み');toast(`❄️ ${json.portions.length}個に小分けして冷凍しました`);}
-      catch(e){log('freezeIng confirm:'+e.message,'err');setSt('err','更新失敗')}
-    };
-  }catch(e){body.innerHTML=`<div style="color:var(--red);font-size:13px">提案の取得に失敗しました：${e.message}</div>`;btn.onclick=null;}
+    if(!json.freezable){
+      title.textContent='⚠️ 冷凍注意';
+      sub.textContent=`${ing.name} は冷凍に向かない可能性があります`;
+      body.innerHTML=`<div style="color:var(--ora);font-size:13px;margin-bottom:12px">${json.warning||''}</div><div class="li-sub">それでも冷凍する場合はボタンを押してください。</div>`;
+      confirmBtn.textContent='⚠️ それでも冷凍する';confirmBtn.style.display='block';
+      confirmBtn.onclick=()=>showFreezeOptions(ing,json,modal,body,confirmBtn);
+    }else{
+      showFreezeOptions(ing,json,modal,body,confirmBtn);
+    }
+  }catch(e){body.innerHTML=`<div style="color:var(--red);font-size:13px">取得失敗：${e.message}</div>`;}
+}
+function showFreezeOptions(ing,json,modal,body,confirmBtn){
+  confirmBtn.style.display='none';
+  const sub=document.getElementById('freeze-modal-sub');
+  sub.textContent=`${ing.name}（${ing.qty}）の分け方を選んでください`;
+  let selectedOption=null;
+  body.innerHTML=`
+    <div id="freeze-options" style="margin-bottom:12px">${(json.options||[]).map((opt,i)=>`
+      <div class="card" id="fopt-${i}" style="cursor:pointer;margin-bottom:8px;border-color:var(--bdr)" onclick="selectFreezeOpt(${i},${(json.options||[]).length})">
+        <div style="font-weight:700;font-size:13px;margin-bottom:6px">${opt.label}</div>
+        ${opt.portions.map(p=>`<div class="ded-item"><span>${p.qty}</span><span style="color:var(--muted);font-size:12px">${p.memo||''}</span></div>`).join('')}
+      </div>`).join('')}
+    </div>
+    ${json.tip?`<div class="li-sub" style="color:var(--tel);margin-bottom:8px">💡 ${json.tip}</div>`:''}
+    ${json.months?`<div class="li-sub" style="color:var(--muted)">保存目安：${json.months}ヶ月</div>`:''}`;
+  window._freezeJson=json;window._freezeIng=ing;window._freezeModal=modal;
+  confirmBtn.textContent='❄️ 冷凍する';confirmBtn.style.display='block';
+  confirmBtn.onclick=async()=>{
+    const sel=document.querySelector('.freeze-opt-selected');
+    if(!sel){toast('分け方を選択してください');return;}
+    const idx=parseInt(sel.id.replace('fopt-',''));
+    const chosen=window._freezeJson.options[idx];
+    modal.style.display='none';
+    const newItems=chosen.portions.map((p,pi)=>({id:`${window._freezeIng.id}_f${pi}`,name:window._freezeIng.name,qty:p.qty,expiry:window._freezeIng.expiry,frozen:true}));
+    ingredients=ingredients.filter(i=>i.id!==window._freezeIng.id).concat(newItems);
+    setSt('busy','更新中...');
+    try{await gasWrite('food',[['id','name','qty','expiry','frozen'],...ingredients.map(i=>[i.id,i.name,i.qty,i.expiry,i.frozen?'1':'0'])]);renderIng();setSt('ok','同期済み');toast(`❄️ ${chosen.portions.length}個に小分けして冷凍しました`);}
+    catch(e){log('freezeIng confirm:'+e.message,'err');setSt('err','更新失敗')}
+  };
+}
+function selectFreezeOpt(idx,total){
+  for(let i=0;i<total;i++){
+    const el=document.getElementById(`fopt-${i}`);
+    if(el){el.style.borderColor=i===idx?'var(--blu)':'var(--bdr)';el.style.background=i===idx?'rgba(90,180,245,.08)':'';if(i===idx)el.classList.add('freeze-opt-selected');else el.classList.remove('freeze-opt-selected');}
+  }
+}
+function showThawModal(ing){
+  const sub=document.getElementById('thaw-modal-sub');
+  sub.textContent=`${ing.name}（${ing.qty}）を解凍します`;
+  const exec=async()=>{
+    ing.frozen=false;setSt('busy','更新中...');
+    document.getElementById('thaw-modal').style.display='none';
+    try{await gasWrite('food',[['id','name','qty','expiry','frozen'],...ingredients.map(i=>[i.id,i.name,i.qty,i.expiry,i.frozen?'1':'0'])]);renderIng();setSt('ok','同期済み');}
+    catch(e){log('thaw:'+e.message,'err');setSt('err','更新失敗')}
+  };
+  document.getElementById('thaw-fridge-btn').onclick=async()=>{await exec();toast('冷蔵庫に移しました。明日使えます！');};
+  document.getElementById('thaw-now-btn').onclick=async()=>{await exec();toast('解凍済みに変更しました。流水で15〜30分解凍してください。');};
+  document.getElementById('thaw-modal').style.display='flex';
 }
 function expSt(ex,frozen){
   if(frozen)return'frozen';if(!ex)return null;
@@ -679,17 +746,18 @@ async function genRecipe(){
   const res=document.getElementById('rec-result'),ph=document.getElementById('rec-placeholder');
   btn.disabled=true;res.style.display='none';ph.style.display='block';ph.className='aibox dim';ph.textContent='生成中...';
   const ingList=ingredients.filter(i=>!i.frozen);
-  const unitMap=Object.fromEntries(ingList.map(i=>{const m=i.qty.match(/[\d.]+\s*(.+)/);return[i.name,m?m[1].trim():i.qty]}));
+  const frozenList=ingredients.filter(i=>i.frozen);
+  const unitMap=Object.fromEntries([...ingList,...frozenList].map(i=>{const m=i.qty.match(/[\d.]+\s*(.+)/);return[i.name,m?m[1].trim():i.qty]}));
   const list=ingList.map(i=>`${i.name}（在庫${i.qty}・単位:${unitMap[i.name]}${i.expiry?`・期限${i.expiry}`:''}）`).join('\n');
-  const frozen=ingredients.filter(i=>i.frozen).map(i=>i.name).join('、');
-  const unitRules=ingList.map(i=>`${i.name} → 必ず「${unitMap[i.name]}」単位で記載`).join('\n');
+  const frozenStr=frozenList.length?`\n冷凍庫（解凍すれば使用可・解凍に12〜24時間必要）：\n${frozenList.map(i=>`${i.name}（${i.qty}）`).join('\n')}`:'';
+  const unitRules=[...ingList,...frozenList].map(i=>`${i.name} → 必ず「${unitMap[i.name]}」単位で記載`).join('\n');
   const recipeHistory=foodLog.filter(e=>e.note==='レシピから記録').slice(0,15).map(e=>`${e.date} ${e.food}`);
   const historySection=recipeHistory.length?`【これまで作った料理（古い順）】\n${[...recipeHistory].reverse().join('\n')}\n→ 上記の履歴を読んで現在のスキルを判断し、今日は少しだけ難しい・新しい技法を使う料理を提案すること。まだ数回しか作っていない場合はシンプルな一品料理で十分。`:`【料理履歴】\nまだなし（初回）\n→ 包丁を使わずに作れる超シンプルな一品から始めること。`;
   try{
     const text=await askClaude(
 `あなたは料理初心者の専属コーチです。最終目標は「大切な人においしい手料理を振る舞えるようになること」です。
 冷蔵庫の食材（在庫量と単位）：
-${list}${frozen?`\n冷凍庫：${frozen}`:''}
+${list}${frozenStr}
 
 【単位ルール（絶対厳守）】
 ${unitRules}
@@ -710,7 +778,7 @@ ${historySection}
 推定カロリー：（数値のみ、例: 520kcal）
 
 【明日の下準備】
-（あれば記載、なければ「特になし」）
+（下準備があれば記載。特に冷凍食材を明日使う場合は「○○を今夜冷凍庫から冷蔵庫に移して解凍（12〜24時間）」と必ず記載。なければ「特になし」）
 
 ---DEDUCT---
 [{"name":"食材名","qty":"使う量（単位ルール通りの単位で数値+単位、例:150g）"}]
