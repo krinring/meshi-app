@@ -733,9 +733,13 @@ ${historySection}
 }
 function showConfirmMade(){
   const el=document.getElementById('deduct-list');
-  el.innerHTML=!lastRecipeDeduct.length
-    ?'<div style="color:var(--muted);font-size:13px">食材を特定できませんでした。手動で在庫を更新してください。</div>'
-    :lastRecipeDeduct.map(d=>`<div class="ded-item"><span>${d.name}</span><span style="color:var(--muted);font-family:'DM Mono',monospace;font-size:12px">${d.qty||''}</span></div>`).join('');
+  const deductable=lastRecipeDeduct.filter(d=>{
+    const ing=ingredients.find(i=>i.name.includes(d.name)||d.name.includes(i.name));
+    return !ing||!/適量|少々|お好み|適宜/.test(ing.qty);
+  });
+  el.innerHTML=!deductable.length
+    ?'<div style="color:var(--muted);font-size:13px">引ける食材がありません（適量表示のものは除外）</div>'
+    :deductable.map(d=>`<div class="ded-item"><span>${d.name}</span><span style="color:var(--muted);font-family:'DM Mono',monospace;font-size:12px">${d.qty||''}</span></div>`).join('');
   const mw=document.getElementById('deduct-meal-wrap');
   const mi=document.getElementById('deduct-meal-info');
   const ms=document.getElementById('deduct-meal-sel');
@@ -758,6 +762,7 @@ async function executeDeduct(){
   lastRecipeDeduct.forEach(d=>{
     const idx=ingredients.findIndex(i=>i.name.includes(d.name)||d.name.includes(i.name));
     if(idx<0)return;
+    if(/適量|少々|お好み|適宜/.test(ingredients[idx].qty))return; // 適量系は減算しない
     const usedN=parseFloat(d.qty)||null,stockN=parseFloat(ingredients[idx].qty)||null;
     if(usedN&&stockN&&usedN<stockN){
       const unit=ingredients[idx].qty.replace(/[\d.]/g,'').trim();
