@@ -764,10 +764,10 @@ async function executeDeduct(){
     if(idx<0)return;
     if(/適量|少々|お好み|適宜/.test(ingredients[idx].qty))return; // 適量系は減算しない
     const usedN=parseFloat(d.qty)||null,stockN=parseFloat(ingredients[idx].qty)||null;
-    if(usedN&&stockN&&usedN<stockN){
-      const unit=ingredients[idx].qty.replace(/[\d.]/g,'').trim();
-      ingredients[idx].qty=String(Math.round((stockN-usedN)*10)/10)+unit;
-    }else{ingredients.splice(idx,1)}
+    if(usedN&&stockN){
+      if(usedN<stockN){const unit=ingredients[idx].qty.replace(/[\d.]/g,'').trim();ingredients[idx].qty=String(Math.round((stockN-usedN)*10)/10)+unit;}
+      else{ingredients.splice(idx,1);}
+    }// どちらかが数値でない場合はスキップ（誤削除防止）
   });
   try{
     await gasWrite('food',[['id','name','qty','expiry','frozen'],...ingredients.map(i=>[i.id,i.name,i.qty,i.expiry,i.frozen?'1':'0'])]);
