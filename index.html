@@ -312,7 +312,10 @@ canvas{display:block;width:100%!important;border-radius:6px}
           </div>
         </div>
         <div class="fg"><textarea id="log-food" rows="2" placeholder="例：松屋の牛丼並・カフェラテ"></textarea></div>
-        <button class="btn btn-o" id="btn-est" onclick="estimateKcal()">🤖 カロリー推定して記録</button>
+        <div class="fg"><label class="lbl">カロリー（分かる場合は入力・空欄でAI推定）</label>
+          <div class="row" style="gap:8px"><input id="log-kcal-input" type="number" placeholder="例：650"><span style="color:var(--muted);font-size:13px;flex-shrink:0">kcal</span></div>
+        </div>
+        <button class="btn btn-o" id="btn-est" onclick="estimateKcal()">📝 記録する</button>
         <div class="aibox dim" id="log-ai" style="display:none"></div>
       </div>
       <div class="sec" style="margin-top:4px">今日の記録</div>
@@ -816,21 +819,33 @@ async function addCheckedToStock(){
 async function estimateKcal(){
   const food=document.getElementById('log-food').value.trim();
   if(!food)return toast('食べたものを入力してください');
+  const manualKcal=parseInt(document.getElementById('log-kcal-input').value)||0;
   const btn=document.getElementById('btn-est'),ai=document.getElementById('log-ai');
-  btn.disabled=true;ai.style.display='block';ai.className='aibox dim';ai.textContent='推定中...';
+  btn.disabled=true;
+  let kcal=manualKcal,note='';
+  if(manualKcal){
+    // 手動入力済み → AI不要
+    ai.style.display='none';
+  }else{
+    // kcal空欄 → Claude推定
+    ai.style.display='block';ai.className='aibox dim';ai.textContent='推定中...';
+    try{
+      const text=await askClaude(`以下の食事のカロリーをJSONのみで。前置き不要。\n食事：${food}\n{"kcal":数値,"note":"一言コメント"}`,200);
+      const json=JSON.parse(text.replace(/```json|```/g,'').trim());
+      kcal=json.kcal;note=json.note||'';
+      ai.className='aibox';ai.textContent=`[${selectedMeal}] 推定 ${kcal} kcal → ${note}`;
+    }catch(e){ai.className='aibox';ai.textContent='エラー: '+e.message;log('estimateKcal:'+e.message,'err');setSt('err','保存失敗');btn.disabled=false;return;}
+  }
   try{
-    const text=await askClaude(`以下の食事のカロリーをJSONのみで。前置き不要。\n食事：${food}\n{"kcal":数値,"note":"一言コメント"}`,200);
-    const json=JSON.parse(text.replace(/```json|```/g,'').trim());
-    const today=todayStr();
-    const entry={id:Date.now().toString(),date:today,food,kcal:json.kcal,note:json.note||'',mealtype:selectedMeal};
+    const entry={id:Date.now().toString(),date:todayStr(),food,kcal,note,mealtype:selectedMeal};
     setSt('busy','保存中...');
     if(!foodLog.length){await gasWrite('foodlog',[['id','date','food','kcal','note','mealtype'],[entry.id,entry.date,entry.food,entry.kcal,entry.note,entry.mealtype]])}
     else{await gasAppend('foodlog',[[entry.id,entry.date,entry.food,entry.kcal,entry.note,entry.mealtype]])}
     foodLog.unshift(entry);
-    ai.className='aibox';ai.textContent=`[${selectedMeal}] 推定 ${json.kcal} kcal → ${json.note}`;
-    document.getElementById('log-food').value='';
+    if(manualKcal){ai.style.display='block';ai.className='aibox';ai.textContent=`[${selectedMeal}] ${kcal} kcal で記録しました`;}
+    document.getElementById('log-food').value='';document.getElementById('log-kcal-input').value='';
     renderLog();setSt('ok','同期済み');
-  }catch(e){ai.className='aibox';ai.textContent='エラー: '+e.message;log('estimateKcal:'+e.message,'err');setSt('err','保存失敗')}
+  }catch(e){log('estimateKcal save:'+e.message,'err');setSt('err','保存失敗')}
   btn.disabled=false;
 }
 async function saveTarget(){
@@ -942,17 +957,30 @@ async function genExercise(){
   const todayKcal=foodLog.filter(e=>e.date===today).reduce((s,e)=>s+e.kcal,0);
   const recentEx=exerciseLog.slice(0,7).map(e=>`${e.date} ${e.activity} ${e.qty}`).join('、')||'なし';
   const latestWt=weightLog.length?weightLog[weightLog.length-1].kg:null;
+  const gymEquipment=`【利用可能なジム設備：エニタイムフィットネス秋葉原店】
+フリーウェイト：パワーラック×2、ハーフラック×2、スミスマシン×2、ダンベル1〜40kg、EZバー、アジャスタブルベンチ×4、フラットベンチ×5、バーティカルニーアップ、バックエクステンション台
+マシン（胸）：チェストプレス、ペックフライ/リアデルト
+マシン（背）：ラットプルダウン、ロングプル、インクラインレバーロウ、アシストディップチン、バックエクステンション
+マシン（脚）：レッグプレス、レッグエクステンション、レッグカール、アブダクション/アダクション
+マシン（肩）：ラテラルレイズ
+マシン（腕）：バイセップカール、トライセップエクステンション、プリチャーカール
+ケーブル：ケーブルマシン×1、MAGグリップ各種、ダブルロープ
+有酸素：トレッドミル×8、クロストレーナー×4、リカンベントバイク×2
+その他：ストレッチスペース、バランスボール、ストレッチポール`;
   try{
-    const text=await askClaude(`ダイエット中の人へ今日の運動を提案してください。
+    const text=await askClaude(`ダイエット中の筋トレ初心者へ今日の運動メニューを提案してください。
+
+${gymEquipment}
+
 カロリー目標：${targetKcal}kcal
 今日の摂取カロリー：${todayKcal}kcal
-最近の運動：${recentEx}
+最近の運動履歴：${recentEx}
 ${latestWt?`現在の体重：${latestWt}kg`:''}
 
-・今日やるべき運動を2〜3つ具体的に（種類・時間・消費kcal目安）
-・無理なく続けられる内容で
-・今日の摂取カロリーを踏まえたアドバイスも一言
-200字程度でまとめてください。`,500);
+・上記ジムの器具を使った具体的なメニューを2〜3種目（種目名・セット数・回数または時間・消費kcal目安）
+・初心者でも安全にできるフォームの注意点を1種目ごとに一言
+・今日の摂取カロリーを踏まえた総合アドバイスを一言
+300字程度でまとめてください。`,600);
     ai.className='aibox';ai.textContent=text;
   }catch(e){ai.className='aibox';ai.textContent='エラー: '+e.message;log('genExercise:'+e.message,'err')}
   btn.disabled=false;
