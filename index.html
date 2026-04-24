@@ -264,6 +264,7 @@ canvas{display:block;width:100%!important;border-radius:6px}
       <div class="row" style="margin-bottom:10px">
         <div style="flex:1"><label class="lbl">数量</label><input id="i-qty" placeholder="例：300g"></div>
         <div style="flex:1"><label class="lbl">消費期限</label><input id="i-exp" type="date"></div>
+        <div style="flex:1"><label class="lbl">購入日</label><input id="i-pdate" type="date"></div>
       </div>
       <button class="btn btn-g" onclick="addIng()">＋ 追加</button>
     </div>
@@ -285,6 +286,7 @@ canvas{display:block;width:100%!important;border-radius:6px}
       <div class="mtabs">
         <div class="mtab on" onclick="rTab('gen',this)">レシピ生成</div>
         <div class="mtab" onclick="rTab('shop',this)">買い物リスト</div>
+        <div class="mtab" onclick="rTab('freeze',this)">❄️ 冷凍おすすめ</div>
       </div>
       <div id="rt-gen">
         <div class="card">
@@ -302,6 +304,14 @@ canvas{display:block;width:100%!important;border-radius:6px}
           <button class="btn btn-o" onclick="showConfirmMade()" style="margin-top:10px;width:100%">✅ 作った！→ 在庫を更新</button>
         </div>
         <div class="aibox dim" id="rec-placeholder">在庫食材を登録してから生成してください。</div>
+      </div>
+      <div id="rt-freeze" style="display:none">
+        <div class="card">
+          <div class="sec">冷凍おすすめチェック</div>
+          <button class="btn btn-b" id="btn-freeze-rec" onclick="genFreezeRecommend()" style="width:100%">❄️ 冷凍すべき食材をチェック</button>
+        </div>
+        <div id="freeze-rec-list"></div>
+        <div class="aibox dim" id="freeze-rec-ai" style="display:none"></div>
       </div>
       <div id="rt-shop" style="display:none">
         <div class="card">
@@ -406,7 +416,7 @@ canvas{display:block;width:100%!important;border-radius:6px}
         <div class="row" style="gap:8px;margin-bottom:10px">
           <div style="flex:2"><label class="lbl">量</label><input id="ex-amount" type="number" placeholder="30"></div>
           <div style="flex:1"><label class="lbl">単位</label><input id="ex-unit" placeholder="分" style="text-align:center"></div>
-          <div style="flex:2"><label class="lbl">消費kcal（任意）</label><input id="ex-kcal" type="number" placeholder="自動推定"></div>
+          <div style="flex:2"><label class="lbl">消費kcal（任意）</label><div class="row" style="gap:4px"><input id="ex-kcal" type="number" placeholder="自動推定"><button class="btn btn-sm" onclick="estimateExKcal()" style="flex-shrink:0;font-size:11px;padding:5px 8px">推測</button></div></div>
         </div>
         <button class="btn btn-g" onclick="logExercise()">✅ 記録する</button>
       </div>
@@ -535,7 +545,7 @@ async function init(){
   useFetch=true;setSt('busy','接続中...');log('=== init ===');
   try{
     const[iD,lD,wD,cD,eD]=await Promise.all([gasRead('food'),gasRead('foodlog'),gasRead('weight'),gasRead('config'),gasRead('exercise')]);
-    ingredients=parseRows(iD).map(r=>({id:String(r[0]),name:String(r[1]||''),qty:String(r[2]||'適量'),expiry:normDate(r[3]),frozen:r[4]==='1'})).filter(r=>r.name);
+    ingredients=parseRows(iD).map(r=>({id:String(r[0]),name:String(r[1]||''),qty:String(r[2]||'適量'),expiry:normDate(r[3]),frozen:r[4]==='1',purchaseDate:normDate(r[5]||'')})).filter(r=>r.name);
     foodLog=parseRows(lD).map(r=>({id:String(r[0]),date:normDate(r[1]),food:String(r[2]||''),kcal:parseInt(r[3])||0,note:String(r[4]||''),mealtype:String(r[5]||'夜')})).filter(r=>r.food);
     weightLog=parseRows(wD).map(r=>({date:normDate(r[0]),kg:parseFloat(r[1])})).filter(r=>r.date&&!isNaN(r.kg));
     weightLog.sort((a,b)=>a.date.localeCompare(b.date));
@@ -577,6 +587,7 @@ function rTab(name,btn){
   document.querySelectorAll('.mtab').forEach(b=>b.classList.remove('on'));btn.classList.add('on');
   document.getElementById('rt-gen').style.display=name==='gen'?'':'none';
   document.getElementById('rt-shop').style.display=name==='shop'?'':'none';
+  document.getElementById('rt-freeze').style.display=name==='freeze'?'':'none';
 }
 
 // ===== Toast =====
@@ -629,16 +640,17 @@ async function addIng(){
   const name=document.getElementById('i-name').value.trim();
   const qty=document.getElementById('i-qty').value.trim()||'適量';
   const exp=document.getElementById('i-exp').value;
+  const pdate=document.getElementById('i-pdate').value||todayStr();
   if(!name)return toast('食材名を入力してください');
   setSt('busy','保存中...');
   try{
     const id=Date.now().toString();
-    const row=[id,name,qty,exp,'0'];
-    if(!ingredients.length){await gasWrite('food',[['id','name','qty','expiry','frozen'],row])}
+    const row=[id,name,qty,exp,'0',pdate];
+    if(!ingredients.length){await gasWrite('food',[['id','name','qty','expiry','frozen','purchaseDate'],row])}
     else{await gasAppend('food',[row])}
-    ingredients.push({id,name,qty,expiry:exp,frozen:false});
+    ingredients.push({id,name,qty,expiry:exp,frozen:false,purchaseDate:pdate});
     updateFavs(name);renderQuickAdd();
-    document.getElementById('i-name').value='';document.getElementById('i-qty').value='';document.getElementById('i-exp').value='';
+    document.getElementById('i-name').value='';document.getElementById('i-qty').value='';document.getElementById('i-exp').value='';document.getElementById('i-pdate').value='';
     renderIng();setSt('ok','同期済み');toast('追加しました！');
   }catch(e){log('addIng:'+e.message,'err');setSt('err','保存失敗');toast('保存失敗')}
 }
@@ -646,7 +658,7 @@ async function delIng(id){
   setSt('busy','削除中...');
   try{
     ingredients=ingredients.filter(i=>i.id!==id);
-    await gasWrite('food',[['id','name','qty','expiry','frozen'],...ingredients.map(i=>[i.id,i.name,i.qty,i.expiry,i.frozen?'1':'0'])]);
+    await gasWrite('food',[['id','name','qty','expiry','frozen','purchaseDate'],...ingredients.map(i=>[i.id,i.name,i.qty,i.expiry,i.frozen?'1':'0',i.purchaseDate||''])]);
     renderIng();setSt('ok','同期済み');toast('削除しました');
   }catch(e){log('delIng:'+e.message,'err');setSt('err','削除失敗')}
 }
@@ -703,10 +715,10 @@ function showFreezeOptions(ing,json,modal,body,confirmBtn){
     const idx=parseInt(sel.id.replace('fopt-',''));
     const chosen=window._freezeJson.options[idx];
     modal.style.display='none';
-    const newItems=chosen.portions.map((p,pi)=>({id:`${window._freezeIng.id}_f${pi}`,name:window._freezeIng.name,qty:p.qty,expiry:window._freezeIng.expiry,frozen:true}));
+    const newItems=chosen.portions.map((p,pi)=>({id:`${window._freezeIng.id}_f${pi}`,name:window._freezeIng.name,qty:p.qty,expiry:window._freezeIng.expiry,frozen:true,purchaseDate:window._freezeIng.purchaseDate||''}));
     ingredients=ingredients.filter(i=>i.id!==window._freezeIng.id).concat(newItems);
     setSt('busy','更新中...');
-    try{await gasWrite('food',[['id','name','qty','expiry','frozen'],...ingredients.map(i=>[i.id,i.name,i.qty,i.expiry,i.frozen?'1':'0'])]);renderIng();setSt('ok','同期済み');toast(`❄️ ${chosen.portions.length}個に小分けして冷凍しました`);}
+    try{await gasWrite('food',[['id','name','qty','expiry','frozen','purchaseDate'],...ingredients.map(i=>[i.id,i.name,i.qty,i.expiry,i.frozen?'1':'0',i.purchaseDate||''])]);renderIng();setSt('ok','同期済み');toast(`❄️ ${chosen.portions.length}個に小分けして冷凍しました`);}
     catch(e){log('freezeIng confirm:'+e.message,'err');setSt('err','更新失敗')}
   };
 }
@@ -722,7 +734,7 @@ function showThawModal(ing){
   const exec=async()=>{
     ing.frozen=false;setSt('busy','更新中...');
     document.getElementById('thaw-modal').style.display='none';
-    try{await gasWrite('food',[['id','name','qty','expiry','frozen'],...ingredients.map(i=>[i.id,i.name,i.qty,i.expiry,i.frozen?'1':'0'])]);renderIng();setSt('ok','同期済み');}
+    try{await gasWrite('food',[['id','name','qty','expiry','frozen','purchaseDate'],...ingredients.map(i=>[i.id,i.name,i.qty,i.expiry,i.frozen?'1':'0',i.purchaseDate||''])]);renderIng();setSt('ok','同期済み');}
     catch(e){log('thaw:'+e.message,'err');setSt('err','更新失敗')}
   };
   document.getElementById('thaw-fridge-btn').onclick=async()=>{await exec();toast('冷蔵庫に移しました。明日使えます！');};
@@ -752,7 +764,7 @@ function renderIng(){
       if(st==='exp')exp++;else if(st==='soon')soon++;
       const bdg=st==='exp'?'<span class="bdg bdg-r">期限切れ</span>':st==='soon'?'<span class="bdg bdg-o">期限近</span>':st==='frozen'?'<span class="bdg bdg-f">❄️冷凍</span>':'';
       const fBtn=(st==='soon'||st==='exp')&&!i.frozen?`<button class="btn btn-sm" style="font-size:11px;padding:5px 8px;color:var(--blu);flex-shrink:0" onclick="freezeIng('${i.id}')">❄️冷凍</button>`:i.frozen?`<button class="btn btn-sm" style="font-size:11px;padding:5px 8px;flex-shrink:0" onclick="freezeIng('${i.id}')">解凍</button>`:'';
-      return `<div class="li"><div style="flex:1"><div class="li-name">${i.name}${bdg}</div>${i.expiry&&!i.frozen?`<div class="li-sub">期限: ${i.expiry.slice(0,10)}</div>`:''}</div><div class="li-val">${i.qty}</div>${fBtn}<button class="btn btn-del" onclick="delIng('${i.id}')">削除</button></div>`;
+      return `<div class="li"><div style="flex:1"><div class="li-name">${i.name}${bdg}</div>${i.expiry&&!i.frozen?`<div class="li-sub">期限: ${i.expiry.slice(0,10)}</div>`:''} ${i.purchaseDate?`<div class="li-sub">購入: ${i.purchaseDate}</div>`:''}</div><div class="li-val">${i.qty}</div>${fBtn}<button class="btn btn-del" onclick="delIng('${i.id}')">削除</button></div>`;
     }).join('');
   }
   document.getElementById('s-total').textContent=ingredients.length;
@@ -905,9 +917,10 @@ async function addCheckedToStock(){
   setSt('busy','在庫追加中...');
   try{
     const now=Date.now();
-    const newItems=checked.map((it,idx)=>({id:String(now+idx),name:it.name,qty:it.qty,expiry:'',frozen:false}));
-    const rows=newItems.map(i=>[i.id,i.name,i.qty,'','0']);
-    if(!ingredients.length){await gasWrite('food',[['id','name','qty','expiry','frozen'],...rows])}
+    const today=todayStr();
+    const newItems=checked.map((it,idx)=>({id:String(now+idx),name:it.name,qty:it.qty,expiry:'',frozen:false,purchaseDate:today}));
+    const rows=newItems.map(i=>[i.id,i.name,i.qty,'','0',i.purchaseDate]);
+    if(!ingredients.length){await gasWrite('food',[['id','name','qty','expiry','frozen','purchaseDate'],...rows])}
     else{await gasAppend('food',rows)}
     newItems.forEach(i=>{ingredients.push(i);updateFavs(i.name)});
     renderIng();renderQuickAdd();
@@ -1110,6 +1123,70 @@ async function logExercise(){
   }catch(e){log('logExercise:'+e.message,'err');setSt('err','保存失敗')}
 }
 
+async function estimateExKcal(){
+  const name=document.getElementById('ex-name').value.trim();
+  const amount=parseFloat(document.getElementById('ex-amount').value)||0;
+  const unit=document.getElementById('ex-unit').value.trim()||'分';
+  if(!name)return toast('運動の種類を入力してください');
+  const mets={ウォーキング:3.5,ジョギング:7,筋トレ:5,ストレッチ:2.5,サイクリング:6};
+  const met=Object.entries(mets).find(([k])=>name.includes(k));
+  const wt=weightLog.length?weightLog[weightLog.length-1].kg:60;
+  if(met&&amount&&unit==='分'){
+    const kcal=Math.round(met[1]*wt*amount/60);
+    document.getElementById('ex-kcal').value=kcal;
+    toast(`${kcal}kcal と推定しました（MET計算）`);return;
+  }
+  const btn=document.querySelector('[onclick="estimateExKcal()"]');
+  if(btn)btn.disabled=true;
+  try{
+    const text=await askClaude(`運動「${name}」${amount?amount+unit:''}の消費カロリーを体重${wt}kgの人向けに整数kcalだけ答えてください。説明不要。数字のみ。`,80);
+    const kcal=parseInt(text.replace(/[^0-9]/g,''));
+    if(kcal){document.getElementById('ex-kcal').value=kcal;toast(`${kcal}kcal と推定しました`);}
+    else toast('推定できませんでした');
+  }catch(e){toast('推定エラー: '+e.message)}
+  if(btn)btn.disabled=false;
+}
+async function genFreezeRecommend(){
+  if(!ingredients.length)return toast('先に食材を登録してください');
+  const btn=document.getElementById('btn-freeze-rec');
+  const ai=document.getElementById('freeze-rec-ai');
+  btn.disabled=true;ai.style.display='block';ai.className='aibox dim';ai.textContent='チェック中...';
+  const today=todayStr();
+  const targets=ingredients.filter(i=>!i.frozen);
+  if(!targets.length){btn.disabled=false;ai.style.display='none';return toast('冷凍可能な食材がありません');}
+  const ingInfo=targets.map(i=>{
+    let info=`${i.name}（${i.qty}）`;
+    if(i.purchaseDate){const days=Math.floor((new Date(today)-new Date(i.purchaseDate))/86400000);info+=`・購入から${days}日`;}
+    if(i.expiry){const dl=daysLeft(i.expiry);info+=`・期限まで${dl}日`;}
+    return `${i.id}:${info}`;
+  }).join('\n');
+  try{
+    const text=await askClaude(
+`以下の食材について冷凍すべきものを優先度付きでJSONのみで回答。前置き不要。
+${ingInfo}
+{"recommendations":[{"id":"食材ID","name":"名前","method":"冷凍方法（1〜2行）","urgency":"high/medium/low","reason":"冷凍を勧める理由"}]}
+urgency: high=今すぐ推奨, medium=近日中に推奨, low=余裕があれば。冷凍に向かない食材は除外。`,600);
+    const json=JSON.parse(text.replace(/```json|```/g,'').trim());
+    renderFreezeRecommend(json.recommendations||[]);
+    ai.style.display='none';
+  }catch(e){ai.className='aibox';ai.textContent='エラー: '+e.message;}
+  btn.disabled=false;
+}
+function renderFreezeRecommend(recs){
+  const el=document.getElementById('freeze-rec-list');
+  if(!recs.length){el.innerHTML='<div class="empty"><div class="e">❄️</div>冷凍推奨の食材はありません</div>';return;}
+  const urgColor={high:'var(--red)',medium:'var(--ora)',low:'var(--tel)'};
+  const urgLabel={high:'今すぐ推奨',medium:'近日中に',low:'余裕あれば'};
+  el.innerHTML=recs.map(r=>`<div class="card" style="margin-bottom:8px;border-left:3px solid ${urgColor[r.urgency]||'var(--bdr)'}">
+    <div class="row" style="align-items:center;margin-bottom:6px">
+      <div style="flex:1;font-weight:700;font-size:14px">${r.name}</div>
+      <span style="font-size:11px;color:${urgColor[r.urgency]||'var(--muted)'};font-family:'DM Mono',monospace">${urgLabel[r.urgency]||''}</span>
+    </div>
+    <div class="li-sub" style="margin-bottom:4px;color:var(--muted)">${r.reason||''}</div>
+    <div class="li-sub" style="margin-bottom:10px">❄️ ${r.method||''}</div>
+    <button class="btn btn-b btn-sm" onclick="freezeIng('${r.id}')" style="width:100%">冷凍する</button>
+  </div>`).join('');
+}
 function drawChart(data){
   const cv=document.getElementById('w-chart'),em=document.getElementById('w-empty');
   if(!data.length){cv.style.display='none';em.style.display='';return}
