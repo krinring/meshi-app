@@ -1162,10 +1162,8 @@ async function genFreezeRecommend(){
   }).join('\n');
   try{
     const text=await askClaude(
-`以下の食材について冷凍すべきものを優先度付きでJSONのみで回答。前置き不要。
-${ingInfo}
-{"recommendations":[{"id":"食材ID","name":"名前","method":"冷凍方法（1〜2行）","urgency":"high/medium/low","reason":"冷凍を勧める理由"}]}
-urgency: high=今すぐ推奨, medium=近日中に推奨, low=余裕があれば。冷凍に向かない食材は除外。`,600);
+`食材リスト（ID:名前・情報）:\n${ingInfo}\n\n冷凍すべき食材をJSONのみで。前置き不要。冷凍不向き（豆腐・卵・生サラダ等）は除外。urgency:high=今すぐ/medium=近日中/low=余裕あれば
+{"recommendations":[{"id":"ID","name":"名","method":"冷凍方法1行","urgency":"high/medium/low","reason":"理由1行"}]}`,1500);
     const json=JSON.parse(text.replace(/```json|```/g,'').trim());
     renderFreezeRecommend(json.recommendations||[]);
     ai.style.display='none';
