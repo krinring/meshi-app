@@ -202,6 +202,14 @@ canvas{display:block;width:100%!important;border-radius:6px}
     <div class="modal-title">✅ 作った！</div>
     <div class="modal-sub">以下の食材を在庫から引きます（調味料は除く）</div>
     <div id="deduct-list" style="margin-bottom:14px"></div>
+    <div style="margin-bottom:14px">
+      <div class="sec" style="margin-bottom:8px">食べた量</div>
+      <div class="row" style="gap:6px">
+        <button class="btn btn-sm meal-sel on" id="dratio-100" onclick="setDeductRatio(1.0,this)" style="flex:1">全部</button>
+        <button class="btn btn-sm meal-sel" id="dratio-50" onclick="setDeductRatio(0.5,this)" style="flex:1">半分</button>
+        <button class="btn btn-sm meal-sel" id="dratio-30" onclick="setDeductRatio(0.3,this)" style="flex:1">少しだけ</button>
+      </div>
+    </div>
     <div id="deduct-meal-wrap" style="margin-bottom:14px;display:none">
       <div class="sec" style="margin-bottom:8px">食事ログにも記録</div>
       <div id="deduct-meal-info" style="font-size:13px;margin-bottom:10px;color:var(--grn);font-family:'DM Mono',monospace"></div>
@@ -281,8 +289,13 @@ canvas{display:block;width:100%!important;border-radius:6px}
       <div id="rt-gen">
         <div class="card">
           <div class="sec">今日のレシピ</div>
+          <div class="row" style="gap:6px;margin-bottom:10px">
+            <button class="btn btn-sm meal-sel" data-rmeal="朝" onclick="selectRecipeMeal(this)" style="flex:1">🌅 朝</button>
+            <button class="btn btn-sm meal-sel" data-rmeal="昼" onclick="selectRecipeMeal(this)" style="flex:1">🌞 昼</button>
+            <button class="btn btn-sm meal-sel on" data-rmeal="夜" onclick="selectRecipeMeal(this)" style="flex:1">🌙 夜</button>
+          </div>
           <div class="fg"><label class="lbl">リクエスト（任意）</label><input id="r-req" placeholder="例：さっぱり系・節食中心"></div>
-          <button class="btn btn-g" id="btn-rec" onclick="genRecipe()">🍳 今日のレシピを生成</button>
+          <button class="btn btn-g" id="btn-rec" onclick="genRecipe()">🍳 レシピを生成</button>
         </div>
         <div id="rec-result" style="display:none">
           <div class="aibox" id="rec-box"></div>
@@ -417,7 +430,7 @@ const GAS='https://script.google.com/macros/s/AKfycbz-VJzYmfwAl3IQyFp9ROZ59LYJBj
 const CLAUDE_API='https://api.anthropic.com/v1/messages';
 
 let ingredients=[],foodLog=[],weightLog=[],exerciseLog=[],targetKcal=1600,shopItems=[];
-let lastRecipeDeduct=[],lastRecipeMeal=null,selectedMeal='朝';
+let lastRecipeDeduct=[],lastRecipeMeal=null,selectedMeal='朝',recipeMealType='夜',deductRatio=1.0;
 let cbCtr=0,dbgLines=[],useFetch=true;
 
 // ===== API Key =====
@@ -571,8 +584,17 @@ function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t
 
 // ===== Meal selector =====
 function selectMeal(btn){
-  document.querySelectorAll('.meal-sel').forEach(b=>b.classList.remove('on'));
+  btn.closest('.row,.fg,div').querySelectorAll('.meal-sel').forEach(b=>b.classList.remove('on'));
   btn.classList.add('on');selectedMeal=btn.getAttribute('data-meal');
+}
+function selectRecipeMeal(btn){
+  btn.closest('.row').querySelectorAll('.meal-sel').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');recipeMealType=btn.getAttribute('data-rmeal');
+}
+function setDeductRatio(ratio,btn){
+  deductRatio=ratio;
+  document.querySelectorAll('#dratio-100,#dratio-50,#dratio-30').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
 }
 
 // ===== Local date helper (JST対応) =====
@@ -765,11 +787,11 @@ ${unitRules}
 
 ${historySection}
 
-今日の夕食1品を提案してください。期限が近い食材を優先。${req?`リクエスト：${req}`:'ダイエット中（500〜700kcal目安）。'}
+今日の${recipeMealType}ご飯1品を提案してください。期限が近い食材を優先。${req?`リクエスト：${req}`:`ダイエット中（${recipeMealType==='朝'?'300〜400':recipeMealType==='昼'?'500〜600':'500〜700'}kcal目安）。`}
 
 以下の形式で答えてください：
 
-【今日の夕食】
+【今日の${recipeMealType}ご飯】
 料理名：
 難易度：（★1〜★5 と一言コメント。例: ★2 火加減の練習）
 使う食材と分量：（各食材の分量は上記単位ルール通りの単位で記載）
@@ -800,6 +822,10 @@ ${historySection}
   btn.disabled=false;
 }
 function showConfirmMade(){
+  // deductRatioリセット
+  deductRatio=1.0;
+  document.querySelectorAll('#dratio-100,#dratio-50,#dratio-30').forEach(b=>b.classList.remove('on'));
+  document.getElementById('dratio-100').classList.add('on');
   const el=document.getElementById('deduct-list');
   const deductable=lastRecipeDeduct.filter(d=>{
     const ing=ingredients.find(i=>i.name.includes(d.name)||d.name.includes(i.name));
@@ -813,6 +839,7 @@ function showConfirmMade(){
   const ms=document.getElementById('deduct-meal-sel');
   if(lastRecipeMeal){
     mi.textContent=`${lastRecipeMeal.name}  ${lastRecipeMeal.kcal}kcal`;
+    const defMeal=recipeMealType;if(defMeal!==selectedMeal)selectedMeal=defMeal;
     const types=['朝','昼','夜','間食'];
     ms.innerHTML=types.map(t=>`<button class="btn btn-sm meal-sel${t===selectedMeal?' on':''}" onclick="setMadeMeal('${t}')">${t}</button>`).join('');
     mw.style.display='block';
@@ -832,15 +859,16 @@ async function executeDeduct(){
     if(idx<0)return;
     if(/適量|少々|お好み|適宜/.test(ingredients[idx].qty))return; // 適量系は減算しない
     const usedN=parseFloat(d.qty)||null,stockN=parseFloat(ingredients[idx].qty)||null;
-    if(usedN&&stockN){
-      if(usedN<stockN){const unit=ingredients[idx].qty.replace(/[\d.]/g,'').trim();ingredients[idx].qty=String(Math.round((stockN-usedN)*10)/10)+unit;}
+    const scaledUsedN=usedN?Math.round(usedN*deductRatio*10)/10:null;
+    if(scaledUsedN&&stockN){
+      if(scaledUsedN<stockN){const unit=ingredients[idx].qty.replace(/[\d.]/g,'').trim();ingredients[idx].qty=String(Math.round((stockN-scaledUsedN)*10)/10)+unit;}
       else{ingredients.splice(idx,1);}
     }// どちらかが数値でない場合はスキップ（誤削除防止）
   });
   try{
     await gasWrite('food',[['id','name','qty','expiry','frozen'],...ingredients.map(i=>[i.id,i.name,i.qty,i.expiry,i.frozen?'1':'0'])]);
     if(lastRecipeMeal){
-      const entry={id:Date.now().toString(),date:todayStr(),food:lastRecipeMeal.name,kcal:lastRecipeMeal.kcal,note:'レシピから記録',mealtype:selectedMeal};
+      const entry={id:Date.now().toString(),date:todayStr(),food:lastRecipeMeal.name,kcal:Math.round(lastRecipeMeal.kcal*deductRatio),note:'レシピから記録',mealtype:selectedMeal};
       if(!foodLog.length){await gasWrite('foodlog',[['id','date','food','kcal','note','mealtype'],[entry.id,entry.date,entry.food,entry.kcal,entry.note,entry.mealtype]])}
       else{await gasAppend('foodlog',[[entry.id,entry.date,entry.food,entry.kcal,entry.note,entry.mealtype]])}
       foodLog.unshift(entry);renderLog();
