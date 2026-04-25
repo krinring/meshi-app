@@ -203,11 +203,11 @@ canvas{display:block;width:100%!important;border-radius:6px}
     <div class="modal-sub">以下の食材を在庫から引きます（調味料は除く）</div>
     <div id="deduct-list" style="margin-bottom:14px"></div>
     <div style="margin-bottom:14px">
-      <div class="sec" style="margin-bottom:8px">食べた量</div>
+      <div class="sec" style="margin-bottom:8px">残り物はありますか？</div>
       <div class="row" style="gap:6px">
-        <button class="btn btn-sm meal-sel on" id="dratio-100" onclick="setDeductRatio(1.0,this)" style="flex:1">全部</button>
-        <button class="btn btn-sm meal-sel" id="dratio-50" onclick="setDeductRatio(0.5,this)" style="flex:1">半分</button>
-        <button class="btn btn-sm meal-sel" id="dratio-30" onclick="setDeductRatio(0.3,this)" style="flex:1">少しだけ</button>
+        <button class="btn btn-sm meal-sel on" id="dratio-100" onclick="setDeductRatio(1.0,this)" style="flex:1">全部食べた</button>
+        <button class="btn btn-sm meal-sel" id="dratio-50" onclick="setDeductRatio(0.5,this)" style="flex:1">半分残った</button>
+        <button class="btn btn-sm meal-sel" id="dratio-30" onclick="setDeductRatio(0.7,this)" style="flex:1">少し残った</button>
       </div>
     </div>
     <div id="deduct-meal-wrap" style="margin-bottom:14px;display:none">
@@ -869,16 +869,21 @@ async function executeDeduct(){
   lastRecipeDeduct.forEach(d=>{
     const idx=ingredients.findIndex(i=>i.name.includes(d.name)||d.name.includes(i.name));
     if(idx<0)return;
-    if(/適量|少々|お好み|適宜/.test(ingredients[idx].qty))return; // 適量系は減算しない
+    if(/適量|少々|お好み|適宜/.test(ingredients[idx].qty))return;
     const usedN=parseFloat(d.qty)||null,stockN=parseFloat(ingredients[idx].qty)||null;
-    const scaledUsedN=usedN?Math.round(usedN*deductRatio*10)/10:null;
-    if(scaledUsedN&&stockN){
-      if(scaledUsedN<stockN){const unit=ingredients[idx].qty.replace(/[\d.]/g,'').trim();ingredients[idx].qty=String(Math.round((stockN-scaledUsedN)*10)/10)+unit;}
+    if(usedN&&stockN){
+      if(usedN<stockN){const unit=ingredients[idx].qty.replace(/[\d.]/g,'').trim();ingredients[idx].qty=String(Math.round((stockN-usedN)*10)/10)+unit;}
       else{ingredients.splice(idx,1);}
-    }// どちらかが数値でない場合はスキップ（誤削除防止）
+    }
   });
+  if(deductRatio<1.0&&lastRecipeMeal){
+    const tomorrow=new Date();tomorrow.setDate(tomorrow.getDate()+1);
+    const tStr=tomorrow.toISOString().slice(0,10);
+    const leftoverQty=deductRatio<=0.5?'1人前（半量）':'少量';
+    ingredients.push({id:Date.now().toString(),name:`${lastRecipeMeal.name}の残り`,qty:leftoverQty,expiry:tStr,frozen:false,purchaseDate:todayStr()});
+  }
   try{
-    await gasWrite('food',[['id','name','qty','expiry','frozen'],...ingredients.map(i=>[i.id,i.name,i.qty,i.expiry,i.frozen?'1':'0'])]);
+    await gasWrite('food',[['id','name','qty','expiry','frozen','purchaseDate'],...ingredients.map(i=>[i.id,i.name,i.qty,i.expiry,i.frozen?'1':'0',i.purchaseDate||''])]);
     if(lastRecipeMeal){
       const entry={id:Date.now().toString(),date:todayStr(),food:lastRecipeMeal.name,kcal:Math.round(lastRecipeMeal.kcal*deductRatio),note:'レシピから記録',mealtype:selectedMeal};
       if(!foodLog.length){await gasWrite('foodlog',[['id','date','food','kcal','note','mealtype'],[entry.id,entry.date,entry.food,entry.kcal,entry.note,entry.mealtype]])}
