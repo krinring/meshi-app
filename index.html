@@ -196,6 +196,26 @@ canvas{display:block;width:100%!important;border-radius:6px}
   </div>
 </div>
 
+<!-- Feedback Modal -->
+<div id="feedback-modal" class="modal-ov" style="display:none">
+  <div class="modal">
+    <div class="modal-title">📝 料理の感想</div>
+    <div id="fb-modal-sub" class="modal-sub"></div>
+    <div style="margin-bottom:16px">
+      <div class="row" style="gap:8px;margin-bottom:12px">
+        <button class="btn btn-sm fb-emoji-btn" data-emoji="😋" onclick="selectFbEmoji('😋',this)" style="flex:1;font-size:22px;padding:10px">😋</button>
+        <button class="btn btn-sm fb-emoji-btn" data-emoji="😐" onclick="selectFbEmoji('😐',this)" style="flex:1;font-size:22px;padding:10px">😐</button>
+        <button class="btn btn-sm fb-emoji-btn" data-emoji="😞" onclick="selectFbEmoji('😞',this)" style="flex:1;font-size:22px;padding:10px">😞</button>
+      </div>
+      <input id="fb-comment" placeholder="コメント（任意）例：塩が薄かった、また作りたい">
+    </div>
+    <div class="row" style="gap:8px">
+      <button class="btn btn-g" style="flex:1" onclick="submitFeedback()">保存</button>
+      <button class="btn btn-sm" style="flex:1" onclick="document.getElementById('feedback-modal').style.display='none'">キャンセル</button>
+    </div>
+  </div>
+</div>
+
 <!-- Confirm Deduct Modal -->
 <div id="deduct-modal" class="modal-ov" style="display:none">
   <div class="modal">
@@ -546,7 +566,7 @@ async function init(){
   try{
     const[iD,lD,wD,cD,eD]=await Promise.all([gasRead('food'),gasRead('foodlog'),gasRead('weight'),gasRead('config'),gasRead('exercise')]);
     ingredients=parseRows(iD).map(r=>({id:String(r[0]),name:String(r[1]||''),qty:String(r[2]||'適量'),expiry:normDate(r[3]),frozen:r[4]==='1',purchaseDate:normDate(r[5]||'')})).filter(r=>r.name);
-    foodLog=parseRows(lD).map(r=>({id:String(r[0]),date:normDate(r[1]),food:String(r[2]||''),kcal:parseInt(r[3])||0,note:String(r[4]||''),mealtype:String(r[5]||'夜')})).filter(r=>r.food);
+    foodLog=parseRows(lD).map(r=>({id:String(r[0]),date:normDate(r[1]),food:String(r[2]||''),kcal:parseInt(r[3])||0,note:String(r[4]||''),mealtype:String(r[5]||'夜'),feedback:String(r[6]||'')})).filter(r=>r.food);
     weightLog=parseRows(wD).map(r=>({date:normDate(r[0]),kg:parseFloat(r[1])})).filter(r=>r.date&&!isNaN(r.kg));
     weightLog.sort((a,b)=>a.date.localeCompare(b.date));
     exerciseLog=parseRows(eD).map(r=>({id:String(r[0]),date:normDate(r[1]),activity:String(r[2]||''),qty:String(r[3]||''),kcal:parseInt(r[4])||0})).filter(r=>r.activity);
@@ -785,8 +805,8 @@ async function genRecipe(){
   const list=ingList.map(i=>`${i.name}（在庫${i.qty}・単位:${unitMap[i.name]}${i.expiry?`・期限${i.expiry}`:''}）`).join('\n');
   const frozenStr=frozenList.length?`\n冷凍庫（解凍すれば使用可・解凍に12〜24時間必要）：\n${frozenList.map(i=>`${i.name}（${i.qty}）`).join('\n')}`:'';
   const unitRules=[...ingList,...frozenList].map(i=>`${i.name} → 必ず「${unitMap[i.name]}」単位で記載`).join('\n');
-  const recipeHistory=foodLog.filter(e=>e.note==='レシピから記録').slice(0,15).map(e=>`${e.date} ${e.food}`);
-  const historySection=recipeHistory.length?`【これまで作った料理（古い順）】\n${[...recipeHistory].reverse().join('\n')}\n→ 上記の履歴を読んで現在のスキルを判断し、今日は少しだけ難しい・新しい技法を使う料理を提案すること。まだ数回しか作っていない場合はシンプルな一品料理で十分。`:`【料理履歴】\nまだなし（初回）\n→ 包丁を使わずに作れる超シンプルな一品から始めること。`;
+  const recipeHistory=foodLog.filter(e=>e.note==='レシピから記録').slice(0,15).map(e=>`${e.date} ${e.food}${e.feedback?' → 評価:'+e.feedback:''}`);
+  const historySection=recipeHistory.length?`【これまで作った料理と評価（古い順）】\n${[...recipeHistory].reverse().join('\n')}\n→ 上記の履歴とフィードバックを参考にスキルを判断し、😋評価の料理は進化版を、😞評価はより簡単な代替を提案。まだ数回しか作っていない場合はシンプルな一品料理で十分。`:`【料理履歴】\nまだなし（初回）\n→ 包丁を使わずに作れる超シンプルな一品から始めること。`;
   try{
     const text=await askClaude(
 `あなたは料理初心者の専属コーチです。最終目標は「大切な人においしい手料理を振る舞えるようになること」です。
@@ -885,9 +905,9 @@ async function executeDeduct(){
   try{
     await gasWrite('food',[['id','name','qty','expiry','frozen','purchaseDate'],...ingredients.map(i=>[i.id,i.name,i.qty,i.expiry,i.frozen?'1':'0',i.purchaseDate||''])]);
     if(lastRecipeMeal){
-      const entry={id:Date.now().toString(),date:todayStr(),food:lastRecipeMeal.name,kcal:Math.round(lastRecipeMeal.kcal*deductRatio),note:'レシピから記録',mealtype:selectedMeal};
-      if(!foodLog.length){await gasWrite('foodlog',[['id','date','food','kcal','note','mealtype'],[entry.id,entry.date,entry.food,entry.kcal,entry.note,entry.mealtype]])}
-      else{await gasAppend('foodlog',[[entry.id,entry.date,entry.food,entry.kcal,entry.note,entry.mealtype]])}
+      const entry={id:Date.now().toString(),date:todayStr(),food:lastRecipeMeal.name,kcal:Math.round(lastRecipeMeal.kcal*deductRatio),note:'レシピから記録',mealtype:selectedMeal,feedback:''};
+      if(!foodLog.length){await gasWrite('foodlog',[['id','date','food','kcal','note','mealtype','feedback'],[entry.id,entry.date,entry.food,entry.kcal,entry.note,entry.mealtype,'']])}
+      else{await gasAppend('foodlog',[[entry.id,entry.date,entry.food,entry.kcal,entry.note,entry.mealtype,'']])}
       foodLog.unshift(entry);renderLog();
     }
     renderIng();setSt('ok','同期済み');toast('在庫を更新しました！'+( lastRecipeMeal?`  ${lastRecipeMeal.name}を${selectedMeal}に記録`:''));
@@ -956,10 +976,10 @@ async function estimateKcal(){
     }catch(e){ai.className='aibox';ai.textContent='エラー: '+e.message;log('estimateKcal:'+e.message,'err');setSt('err','保存失敗');btn.disabled=false;return;}
   }
   try{
-    const entry={id:Date.now().toString(),date:todayStr(),food,kcal,note,mealtype:selectedMeal};
+    const entry={id:Date.now().toString(),date:todayStr(),food,kcal,note,mealtype:selectedMeal,feedback:''};
     setSt('busy','保存中...');
-    if(!foodLog.length){await gasWrite('foodlog',[['id','date','food','kcal','note','mealtype'],[entry.id,entry.date,entry.food,entry.kcal,entry.note,entry.mealtype]])}
-    else{await gasAppend('foodlog',[[entry.id,entry.date,entry.food,entry.kcal,entry.note,entry.mealtype]])}
+    if(!foodLog.length){await gasWrite('foodlog',[['id','date','food','kcal','note','mealtype','feedback'],[entry.id,entry.date,entry.food,entry.kcal,entry.note,entry.mealtype,'']])}
+    else{await gasAppend('foodlog',[[entry.id,entry.date,entry.food,entry.kcal,entry.note,entry.mealtype,'']])}
     foodLog.unshift(entry);
     if(manualKcal){ai.style.display='block';ai.className='aibox';ai.textContent=`[${selectedMeal}] ${kcal} kcal で記録しました`;}
     document.getElementById('log-food').value='';document.getElementById('log-kcal-input').value='';
@@ -975,6 +995,39 @@ async function saveTarget(){
   catch(e){log('saveTarget:'+e.message,'err');setSt('err','保存失敗')}
   renderLog();
 }
+function openFeedbackModal(id,name){
+  window._fbId=id;
+  document.getElementById('fb-modal-sub').textContent=name;
+  document.querySelectorAll('.fb-emoji-btn').forEach(b=>b.classList.remove('on'));
+  window._fbEmoji='';
+  const entry=foodLog.find(e=>e.id===id);
+  if(entry&&entry.feedback){
+    const parts=entry.feedback.match(/^(\S+)\s*(.*)/)||[];
+    window._fbEmoji=parts[1]||'';
+    document.getElementById('fb-comment').value=parts[2]||'';
+    document.querySelectorAll('.fb-emoji-btn').forEach(b=>{if(b.dataset.emoji===window._fbEmoji)b.classList.add('on');});
+  }else{document.getElementById('fb-comment').value='';}
+  document.getElementById('feedback-modal').style.display='flex';
+}
+function selectFbEmoji(emoji,btn){
+  window._fbEmoji=emoji;
+  document.querySelectorAll('.fb-emoji-btn').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+}
+async function submitFeedback(){
+  if(!window._fbEmoji)return toast('評価を選んでください（😋 / 😐 / 😞）');
+  const comment=document.getElementById('fb-comment').value.trim();
+  const feedback=window._fbEmoji+(comment?' '+comment:'');
+  const entry=foodLog.find(e=>e.id===window._fbId);
+  if(!entry)return;
+  entry.feedback=feedback;
+  document.getElementById('feedback-modal').style.display='none';
+  setSt('busy','保存中...');
+  try{
+    await gasWrite('foodlog',[['id','date','food','kcal','note','mealtype','feedback'],...foodLog.map(e=>[e.id,e.date,e.food,e.kcal,e.note,e.mealtype,e.feedback||''])]);
+    renderLog();setSt('ok','同期済み');toast('感想を保存しました');
+  }catch(e){log('submitFeedback:'+e.message,'err');setSt('err','保存失敗')}
+}
 function renderLog(){
   const today=todayStr();
   const tE=foodLog.filter(e=>e.date===today),pE=foodLog.filter(e=>e.date!==today);
@@ -985,15 +1038,20 @@ function renderLog(){
   bar.style.width=pct+'%';bar.className='pgbar'+(tK>targetKcal?' ov':'');
   const mOrd=['朝','昼','夜','間食'];
   const mCol={朝:'var(--ora)',昼:'var(--grn)',夜:'var(--blu)',間食:'var(--red)'};
+  const fbBtn=(e)=>e.note==='レシピから記録'
+    ?(e.feedback
+      ?`<div style="margin-top:4px"><span style="font-size:12px;cursor:pointer;background:rgba(255,255,255,.08);border-radius:6px;padding:2px 8px" onclick="openFeedbackModal('${e.id}','${e.food.replace(/'/g,"\\'")}')">${e.feedback} ✏️</span></div>`
+      :`<div style="margin-top:4px"><button class="btn btn-sm" onclick="openFeedbackModal('${e.id}','${e.food.replace(/'/g,"\\'")}')"\n        style="font-size:11px;padding:3px 10px;color:var(--muted)">📝 感想を残す</button></div>`)
+    :'';
   document.getElementById('log-today').innerHTML=!tE.length
     ?'<div class="empty"><div class="e">🍽</div>まだ記録なし</div>'
-    :[...tE].sort((a,b)=>mOrd.indexOf(a.mealtype)-mOrd.indexOf(b.mealtype)).map(e=>`<div class="li"><div><div class="li-name"><span class="meal-bdg meal-${e.mealtype||'夜'}">${e.mealtype||'夜'}</span>${e.food}</div><div class="li-sub" style="color:${mCol[e.mealtype]||'var(--ora)'}">${e.kcal} kcal${e.note?' · '+e.note:''}</div></div></div>`).join('');
+    :[...tE].sort((a,b)=>mOrd.indexOf(a.mealtype)-mOrd.indexOf(b.mealtype)).map(e=>`<div class="li"><div><div class="li-name"><span class="meal-bdg meal-${e.mealtype||'夜'}">${e.mealtype||'夜'}</span>${e.food}</div><div class="li-sub" style="color:${mCol[e.mealtype]||'var(--ora)'}">${e.kcal} kcal${e.note?' · '+e.note:''}</div>${fbBtn(e)}</div></div>`).join('');
   if(!pE.length){document.getElementById('log-past').innerHTML='<div class="empty"><div class="e">📅</div>記録がありません</div>';return}
   const gr={};
   pE.forEach(e=>{if(!gr[e.date])gr[e.date]=[];gr[e.date].push(e)});
   document.getElementById('log-past').innerHTML=Object.entries(gr).sort((a,b)=>b[0].localeCompare(a[0])).slice(0,5).map(([date,es])=>{
     const total=es.reduce((s,e)=>s+(e.kcal||0),0);
-    return `<div style="margin-bottom:12px"><div class="li-sub">${date} → 合計 ${total} kcal</div>${[...es].sort((a,b)=>mOrd.indexOf(a.mealtype)-mOrd.indexOf(b.mealtype)).map(e=>`<div class="li" style="padding:6px 0"><div><div class="li-name" style="font-size:13px"><span class="meal-bdg meal-${e.mealtype||'夜'}" style="font-size:9px">${e.mealtype||'夜'}</span>${e.food}</div><div class="li-sub" style="color:var(--ora)">${e.kcal} kcal${e.note?' · '+e.note:''}</div></div></div>`).join('')}</div>`;
+    return `<div style="margin-bottom:12px"><div class="li-sub">${date} → 合計 ${total} kcal</div>${[...es].sort((a,b)=>mOrd.indexOf(a.mealtype)-mOrd.indexOf(b.mealtype)).map(e=>`<div class="li" style="padding:6px 0"><div><div class="li-name" style="font-size:13px"><span class="meal-bdg meal-${e.mealtype||'夜'}" style="font-size:9px">${e.mealtype||'夜'}</span>${e.food}</div><div class="li-sub" style="color:var(--ora)">${e.kcal} kcal${e.note?' · '+e.note:''}</div>${fbBtn(e)}</div></div>`).join('')}</div>`;
   }).join('');
 }
 async function genWeeklySummary(){
