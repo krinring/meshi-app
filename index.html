@@ -567,9 +567,10 @@ function normDate(s){s=String(s||'');if(!s)return'';if(s.includes('T')){const d=
 async function init(){
   useFetch=true;setSt('busy','接続中...');log('=== init ===');
   try{
-    const[iD,lD,wD,cD,eD]=await Promise.all([gasRead('food'),gasRead('foodlog'),gasRead('weight'),gasRead('config'),gasRead('exercise')]);
+    const[iD,lD,wD,cD,eD,fbD]=await Promise.all([gasRead('food'),gasRead('foodlog'),gasRead('weight'),gasRead('config'),gasRead('exercise'),gasRead('feedback').catch(()=>[])]);
     ingredients=parseRows(iD).map(r=>({id:String(r[0]),name:String(r[1]||''),qty:String(r[2]||'適量'),expiry:normDate(r[3]),frozen:r[4]==='1',purchaseDate:normDate(r[5]||'')})).filter(r=>r.name);
-    foodLog=parseRows(lD).map(r=>({id:String(r[0]),date:normDate(r[1]),food:String(r[2]||''),kcal:parseInt(r[3])||0,note:String(r[4]||''),mealtype:String(r[5]||'夜'),feedback:String(r[6]||'')})).filter(r=>r.food);
+    const fbMap=Object.fromEntries(parseRows(fbD).map(r=>[String(r[0]),String(r[1]||'')]));
+    foodLog=parseRows(lD).map(r=>({id:String(r[0]),date:normDate(r[1]),food:String(r[2]||''),kcal:parseInt(r[3])||0,note:String(r[4]||''),mealtype:String(r[5]||'夜'),feedback:fbMap[String(r[0])]||''})).filter(r=>r.food);
     weightLog=parseRows(wD).map(r=>({date:normDate(r[0]),kg:parseFloat(r[1])})).filter(r=>r.date&&!isNaN(r.kg));
     weightLog.sort((a,b)=>a.date.localeCompare(b.date));
     exerciseLog=parseRows(eD).map(r=>({id:String(r[0]),date:normDate(r[1]),activity:String(r[2]||''),qty:String(r[3]||''),kcal:parseInt(r[4])||0})).filter(r=>r.activity);
@@ -579,17 +580,6 @@ async function init(){
     document.getElementById('target-in').value=targetKcal;
     document.getElementById('kcal-target').textContent=targetKcal;
     log(`食材:${ingredients.length} ログ:${foodLog.length} 体重:${weightLog.length} 運動:${exerciseLog.length}`,'ok');
-    // foodlog・food シートの列マイグレーション（feedback / purchaseDate 列がなければ追記）
-    const lHeader=lD[0]||[];
-    if(foodLog.length && lHeader.length < 7){
-      log('foodlog: feedback列を追加（マイグレーション）','ok');
-      gasWrite('foodlog',[['id','date','food','kcal','note','mealtype','feedback'],...foodLog.map(e=>[e.id,e.date,e.food,e.kcal,e.note,e.mealtype,e.feedback||''])]).catch(err=>log('foodlog migrate:'+err.message,'err'));
-    }
-    const iHeader=iD[0]||[];
-    if(ingredients.length && iHeader.length < 6){
-      log('food: purchaseDate列を追加（マイグレーション）','ok');
-      gasWrite('food',[['id','name','qty','expiry','frozen','purchaseDate'],...ingredients.map(i=>[i.id,i.name,i.qty,i.expiry,i.frozen?'1':'0',i.purchaseDate||''])]).catch(err=>log('food migrate:'+err.message,'err'));
-    }
     renderAll();setSt('ok','同期済み');
   }catch(e){log('init ERROR: '+e.message,'err');setSt('err','失敗（タップで詳細）');toast('接続失敗 → ステータスタップで確認')}
 }
@@ -962,8 +952,8 @@ async function executeDeduct(){
     await gasWrite('food',[['id','name','qty','expiry','frozen','purchaseDate'],...ingredients.map(i=>[i.id,i.name,i.qty,i.expiry,i.frozen?'1':'0',i.purchaseDate||''])]);
     if(lastRecipeMeal){
       const entry={id:Date.now().toString(),date:todayStr(),food:lastRecipeMeal.name,kcal:Math.round(lastRecipeMeal.kcal*deductRatio),note:'レシピから記録',mealtype:selectedMeal,feedback:''};
-      if(!foodLog.length){await gasWrite('foodlog',[['id','date','food','kcal','note','mealtype','feedback'],[entry.id,entry.date,entry.food,entry.kcal,entry.note,entry.mealtype,'']])}
-      else{await gasAppend('foodlog',[[entry.id,entry.date,entry.food,entry.kcal,entry.note,entry.mealtype,'']])}
+      if(!foodLog.length){await gasWrite('foodlog',[['id','date','food','kcal','note','mealtype'],[entry.id,entry.date,entry.food,entry.kcal,entry.note,entry.mealtype]])}
+      else{await gasAppend('foodlog',[[entry.id,entry.date,entry.food,entry.kcal,entry.note,entry.mealtype]])}
       foodLog.unshift(entry);renderLog();
     }
     renderIng();setSt('ok','同期済み');toast('在庫を更新しました！'+( lastRecipeMeal?`  ${lastRecipeMeal.name}を${selectedMeal}に記録`:''));
@@ -1034,8 +1024,8 @@ async function estimateKcal(){
   try{
     const entry={id:Date.now().toString(),date:todayStr(),food,kcal,note,mealtype:selectedMeal,feedback:''};
     setSt('busy','保存中...');
-    if(!foodLog.length){await gasWrite('foodlog',[['id','date','food','kcal','note','mealtype','feedback'],[entry.id,entry.date,entry.food,entry.kcal,entry.note,entry.mealtype,'']])}
-    else{await gasAppend('foodlog',[[entry.id,entry.date,entry.food,entry.kcal,entry.note,entry.mealtype,'']])}
+    if(!foodLog.length){await gasWrite('foodlog',[['id','date','food','kcal','note','mealtype'],[entry.id,entry.date,entry.food,entry.kcal,entry.note,entry.mealtype]])}
+    else{await gasAppend('foodlog',[[entry.id,entry.date,entry.food,entry.kcal,entry.note,entry.mealtype]])}
     foodLog.unshift(entry);
     if(manualKcal){ai.style.display='block';ai.className='aibox';ai.textContent=`[${selectedMeal}] ${kcal} kcal で記録しました`;}
     document.getElementById('log-food').value='';document.getElementById('log-kcal-input').value='';
@@ -1080,7 +1070,8 @@ async function submitFeedback(){
   document.getElementById('feedback-modal').style.display='none';
   setSt('busy','保存中...');
   try{
-    await gasWrite('foodlog',[['id','date','food','kcal','note','mealtype','feedback'],...foodLog.map(e=>[e.id,e.date,e.food,e.kcal,e.note,e.mealtype,e.feedback||''])]);
+    const fbEntries=foodLog.filter(e=>e.feedback);
+    await gasWrite('feedback',[['logId','feedback'],...fbEntries.map(e=>[e.id,e.feedback])]);
     renderLog();setSt('ok','同期済み');toast('感想を保存しました');
   }catch(e){log('submitFeedback:'+e.message,'err');setSt('err','保存失敗')}
 }
