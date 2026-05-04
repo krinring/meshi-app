@@ -579,6 +579,17 @@ async function init(){
     document.getElementById('target-in').value=targetKcal;
     document.getElementById('kcal-target').textContent=targetKcal;
     log(`食材:${ingredients.length} ログ:${foodLog.length} 体重:${weightLog.length} 運動:${exerciseLog.length}`,'ok');
+    // foodlog・food シートの列マイグレーション（feedback / purchaseDate 列がなければ追記）
+    const lHeader=lD[0]||[];
+    if(foodLog.length && lHeader.length < 7){
+      log('foodlog: feedback列を追加（マイグレーション）','ok');
+      gasWrite('foodlog',[['id','date','food','kcal','note','mealtype','feedback'],...foodLog.map(e=>[e.id,e.date,e.food,e.kcal,e.note,e.mealtype,e.feedback||''])]).catch(err=>log('foodlog migrate:'+err.message,'err'));
+    }
+    const iHeader=iD[0]||[];
+    if(ingredients.length && iHeader.length < 6){
+      log('food: purchaseDate列を追加（マイグレーション）','ok');
+      gasWrite('food',[['id','name','qty','expiry','frozen','purchaseDate'],...ingredients.map(i=>[i.id,i.name,i.qty,i.expiry,i.frozen?'1':'0',i.purchaseDate||''])]).catch(err=>log('food migrate:'+err.message,'err'));
+    }
     renderAll();setSt('ok','同期済み');
   }catch(e){log('init ERROR: '+e.message,'err');setSt('err','失敗（タップで詳細）');toast('接続失敗 → ステータスタップで確認')}
 }
