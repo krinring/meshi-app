@@ -385,11 +385,17 @@ canvas{display:block;width:100%!important;border-radius:8px}
 <!-- Ambient background orbs -->
 <div class="bg-orbs" aria-hidden="true"><span></span><span></span><span></span></div>
 
-<!-- API Key Modal -->
+<!-- Setup Modal (GAS + API Key) -->
 <div id="key-modal" class="modal-ov" style="display:none">
   <div class="modal">
     <div class="modal-title">め<em style="color:var(--grn);font-style:normal">し管理</em> セットアップ</div>
-    <div class="modal-sub">Claude APIキーを入力してください。<br>キーはこのデバイスのみ（localStorage）に保存されます。</div>
+    <div class="modal-sub">下記をこのデバイス（localStorage）に保存します。<br>サーバーには送られません。</div>
+    <div class="fg"><label class="lbl">GAS Web App URL</label>
+      <input id="gas-url-in" type="text" placeholder="https://script.google.com/macros/s/.../exec" autocomplete="off">
+    </div>
+    <div class="fg"><label class="lbl">GAS API Token</label>
+      <input id="gas-token-in" type="password" placeholder="スクリプトプロパティ API_TOKEN と同じ値" autocomplete="off">
+    </div>
     <div class="fg"><label class="lbl">Claude API Key</label>
       <input id="key-in" type="password" placeholder="sk-ant-api03-..." autocomplete="off">
     </div>
@@ -447,6 +453,14 @@ canvas{display:block;width:100%!important;border-radius:8px}
       <div class="sec">Claude APIキー</div>
       <input id="s-key" type="password" placeholder="sk-ant-..." autocomplete="off" style="margin-bottom:8px">
       <button class="btn btn-sm" style="width:100%" onclick="saveKeyFromSettings()">APIキーを更新</button>
+    </div>
+    <div style="border-top:1px solid var(--bdr);padding-top:14px;margin-bottom:14px">
+      <div class="sec">GAS 接続</div>
+      <label class="lbl">GAS Web App URL</label>
+      <input id="s-gas-url" type="text" placeholder="https://script.google.com/macros/s/.../exec" autocomplete="off" style="margin-bottom:8px">
+      <label class="lbl">GAS API Token</label>
+      <input id="s-gas-token" type="password" placeholder="API_TOKEN" autocomplete="off" style="margin-bottom:8px">
+      <button class="btn btn-sm" style="width:100%" onclick="saveGasFromSettings()">GAS設定を更新</button>
     </div>
     <button class="btn btn-sm" style="width:100%" onclick="document.getElementById('settings-modal').style.display='none'">閉じる</button>
   </div>
@@ -765,8 +779,9 @@ canvas{display:block;width:100%!important;border-radius:8px}
 <div class="toast" id="toast"></div>
 
 <script>
-const GAS='https://script.google.com/macros/s/AKfycbz-VJzYmfwAl3IQyFp9ROZ59LYJBjPia8x8fGvLDH_1Tzrd7DD0OUE1C3gygwzdGsM8/exec';
 const CLAUDE_API='https://api.anthropic.com/v1/messages';
+const getGasUrl=()=>localStorage.getItem('gas_url')||'';
+const getGasToken=()=>localStorage.getItem('gas_token')||'';
 
 let ingredients=[],foodLog=[],weightLog=[],exerciseLog=[],targetKcal=1600,shopItems=[];
 let lastRecipeDeduct=[],lastRecipeMeal=null,selectedMeal='朝',recipeMealType='夜',deductRatio=1.0;
@@ -775,17 +790,35 @@ let targetProtein=0,targetFat=0,targetCarbs=0;
 let _fbId=null,_fbEmoji='';
 const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
-// ===== API Key =====
+// ===== Setup (GAS + API Key) =====
 function showKeyModal(){
   document.getElementById('key-in').value=localStorage.getItem('claude_api_key')||'';
+  document.getElementById('gas-url-in').value=getGasUrl();
+  document.getElementById('gas-token-in').value=getGasToken();
   document.getElementById('key-modal').style.display='flex';
 }
 function saveKey(){
   const k=document.getElementById('key-in').value.trim();
-  if(!k||!k.startsWith('sk-ant-'))return toast('sk-ant- で始まるキーを入力してください');
+  const u=document.getElementById('gas-url-in').value.trim();
+  const t=document.getElementById('gas-token-in').value.trim();
+  if(!u||!/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec/.test(u))return toast('GAS Web App URL (https://script.google.com/macros/s/.../exec) を入力してください');
+  if(!t)return toast('GAS API Token を入力してください');
+  if(!k||!k.startsWith('sk-ant-'))return toast('sk-ant- で始まるClaude APIキーを入力してください');
+  localStorage.setItem('gas_url',u);
+  localStorage.setItem('gas_token',t);
   localStorage.setItem('claude_api_key',k);
   document.getElementById('key-modal').style.display='none';
   init();
+}
+function saveGasFromSettings(){
+  const u=document.getElementById('s-gas-url').value.trim();
+  const t=document.getElementById('s-gas-token').value.trim();
+  if(!u||!/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec/.test(u))return toast('GAS URL の形式が不正です');
+  if(!t)return toast('GAS API Token を入力してください');
+  localStorage.setItem('gas_url',u);
+  localStorage.setItem('gas_token',t);
+  useFetch=true;
+  toast('GAS設定を更新しました');
 }
 
 // ===== Settings / TDEE =====
@@ -802,6 +835,8 @@ function showSettings(){
   document.getElementById('s-carbs').value=targetCarbs||'';
   document.getElementById('pfc-calc-result').textContent='';
   document.getElementById('s-key').value=localStorage.getItem('claude_api_key')||'';
+  document.getElementById('s-gas-url').value=getGasUrl();
+  document.getElementById('s-gas-token').value=getGasToken();
   document.getElementById('tdee-result').textContent='';
   document.getElementById('settings-modal').style.display='flex';
 }
@@ -882,27 +917,32 @@ function log(msg,type=''){
 
 // ===== GAS =====
 async function gasCall(params){
-  const qs=Object.entries(params).map(([k,v])=>encodeURIComponent(k)+'='+encodeURIComponent(v)).join('&');
+  const url=getGasUrl(),token=getGasToken();
+  if(!url||!token){log('GAS未設定','err');throw new Error('GAS URL/token 未設定')}
+  const p={...params,token};
+  const qs=Object.entries(p).map(([k,v])=>encodeURIComponent(k)+'='+encodeURIComponent(v)).join('&');
   if(useFetch){
     try{
       log(`fetch→ ${params.action}[${params.sheet||''}]`);
-      const r=await fetch(GAS+'?'+qs,{redirect:'follow'});
+      const r=await fetch(url+'?'+qs,{redirect:'follow'});
       const text=await r.text();
       log('fetch raw: '+text.slice(0,80));
       const json=JSON.parse(text);
       if(json.ok!==undefined){log('fetch OK','ok');return json}
     }catch(e){log(`fetch失敗(${e.message}) →JSONP`,'err');useFetch=false}
   }
-  return jsonpCall(params);
+  return jsonpCall(p);
 }
 function jsonpCall(params){
+  const url=getGasUrl();
+  if(!url)return Promise.reject(new Error('GAS URL 未設定'));
   return new Promise((resolve,reject)=>{
     const name='__cb'+(cbCtr++);let done=false;
     const timer=setTimeout(()=>{if(done)return;done=true;cleanup();reject(new Error('timeout'))},15000);
     window[name]=(d)=>{if(done)return;done=true;clearTimeout(timer);cleanup();resolve(d)};
     const cleanup=()=>{delete window[name];const s=document.getElementById('_s'+name);if(s)s.remove()};
     const qs=Object.entries({...params,callback:name}).map(([k,v])=>encodeURIComponent(k)+'='+encodeURIComponent(v)).join('&');
-    const sc=document.createElement('script');sc.id='_s'+name;sc.src=GAS+'?'+qs;
+    const sc=document.createElement('script');sc.id='_s'+name;sc.src=url+'?'+qs;
     sc.onerror=()=>{if(done)return;done=true;clearTimeout(timer);cleanup();reject(new Error('script error'))};
     log(`jsonp→ ${params.action}[${params.sheet||''}]`);document.head.appendChild(sc);
   });
@@ -1778,7 +1818,7 @@ function drawChart(data){
 // ===== Start =====
 initDesktop();
 document.getElementById('i-pdate').value=todayStr();
-if(!localStorage.getItem('claude_api_key')){showKeyModal()}else{init()}
+if(!getGasUrl()||!getGasToken()||!localStorage.getItem('claude_api_key')){showKeyModal()}else{init()}
 document.querySelectorAll('.modal-ov').forEach(ov=>{ov.addEventListener('click',e=>{if(e.target===ov)ov.style.display='none';});});
 </script>
 </body>
